@@ -1,460 +1,311 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /Servindteca/login.php");
+    header("Location: /Servindteca/auth/login.php");
     exit();
 }
 require_once '../includes/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 
+$venta_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
-$venta_id = isset($_GET['id']) ? limpiar($_GET['id']) : '';
-$error = '';
-$venta = null;
-$detalle_original = [];
-
-if (empty($venta_id) || !is_numeric($venta_id)) {
-    header("Location: index.php?error=venta_invalida");
+if ($venta_id <= 0) {
+    header("Location: index.php?error=id_invalido");
     exit();
 }
 
+// --- 1. CARGAR DATOS PARA LA VISTA ---
 
-// --- CONSULTAS NECESARIAS ---
-$productos_sql = "
-    (SELECT codigo, nombre, precio_venta, stock, 'maquina' as tipo FROM maquinas)
-    UNION ALL
-    (SELECT codigo, nombre, precio_venta, stock, 'repuesto' as tipo FROM repuestos)
-    ORDER BY nombre
-";
-$productos_result = $conn->query($productos_sql);
-$clientes_result = $conn->query("SELECT id, nombre FROM empresas ORDER BY nombre");
-
-// Almacenar datos para fácil acceso en la lógica POST
-$productos_data = []; 
-if ($productos_result->num_rows > 0) {
-    while ($p = $productos_result->fetch_assoc()) {
-        $productos_data[$p['codigo']] = $p;
-    }
+// Productos para el selector (Catálogo completo)
+$sql_prod = "SELECT codigo, nombre, precio_venta, stock, 'maquina' as tipo FROM maquinas 
+             UNION ALL
+             SELECT codigo, nombre, precio_venta, stock, 'repuesto' as tipo FROM repuestos 
+             ORDER BY nombre";
+$productos = $conn->query($sql_prod);
+$lista_productos = [];
+while($p = $productos->fetch_assoc()) {
+    $lista_productos[] = $p;
 }
-$productos_result->data_seek(0); // Reiniciar el puntero para el HTML
 
-// 1. CARGA DE CABECERA
-$sql_venta_cabecera = "SELECT v.*, e.nombre as empresa_nombre FROM ventas v JOIN empresas e ON v.empresas_id = e.id WHERE v.id = ?";
-$stmt_venta_cabecera = $conn->prepare($sql_venta_cabecera);
-$stmt_venta_cabecera->bind_param("i", $venta_id);
-$stmt_venta_cabecera->execute();
-$venta = $stmt_venta_cabecera->get_result()->fetch_assoc(); 
-$stmt_venta_cabecera->close();
+// Clientes
+$clientes = $conn->query("SELECT id, nombre, rif FROM empresas ORDER BY nombre");
+
+// Datos de la Venta Actual (Cabecera)
+$stmt = $conn->prepare("SELECT * FROM ventas WHERE id = ?");
+$stmt->bind_param("i", $venta_id);
+$stmt->execute();
+$venta = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 if (!$venta) {
     header("Location: index.php?error=venta_no_encontrada");
     exit();
 }
 
-// 2. CARGA DEL DETALLE ORIGINAL (CORRECCIÓN AQUÍ)
-$sql_detalle = "SELECT 
-                    COALESCE(codigo_maquina, codigo_repuesto) AS codigo, 
-                    cantidad, 
-                    precio_unitario 
-                FROM detalle_venta 
-                WHERE venta_id = ?";
-$stmt_detalle = $conn->prepare($sql_detalle);
-$stmt_detalle->bind_param("i", $venta_id);
-$stmt_detalle->execute();
-$result_detalle = $stmt_detalle->get_result();
-
-while ($fila = $result_detalle->fetch_assoc()) {
-    $detalle_original[] = $fila;
+// Datos de la Venta Actual (Detalle)
+$stmt_det = $conn->prepare("SELECT codigo_producto as codigo, cantidad, precio_unitario FROM detalle_venta WHERE venta_id = ?");
+$stmt_det->bind_param("i", $venta_id);
+$stmt_det->execute();
+$result_det = $stmt_det->get_result();
+$detalles_actuales = [];
+while($row = $result_det->fetch_assoc()) {
+    $detalles_actuales[] = $row;
 }
-$stmt_detalle->close();
+$stmt_det->close();
 
-$detalle_original_json = json_encode($detalle_original);
+// Codificar detalles para pasarlos a JS
+$json_detalles = json_encode($detalles_actuales);
+$json_productos = json_encode($lista_productos);
 
+$error = '';
 
+// --- 2. PROCESAR EL FORMULARIO (POST) ---
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $cliente_id_nuevo = limpiar($_POST['cliente_id'] ?? $venta['empresas_id']);
-    $descripcion_nueva = limpiar($_POST['descripcion'] ?? $venta['descripcion']);
-    $fecha_nueva = limpiar($_POST['fecha'] ?? $venta['fecha_venta']);
-    $items_nuevos = $_POST['items'] ?? []; 
-    $detalle_original_post = json_decode($_POST['detalle_original_json'] ?? '[]', true);
+    $cliente_id = intval($_POST['cliente_id']);
+    $fecha = $_POST['fecha'];
+    $num_comprobante = limpiar($_POST['num_comprobante'] ?? '');
+    $descripcion = limpiar($_POST['descripcion'] ?? '');
+    $items = $_POST['items'] ?? [];
     
-    $total_nuevo = 0.00;
-    $errores_items = [];
-    
-    // VALIDACIÓN Y CÁLCULO DEL NUEVO TOTAL
-    foreach ($items_nuevos as $index => $item) {
-        $codigo = limpiar($item['codigo'] ?? '');
-        $cantidad = limpiar($item['cantidad'] ?? 0);
-        $precio = limpiar($item['precio_unitario'] ?? 0.00);
-        
-        if (empty($codigo) || !isset($productos_data[$codigo])) {
-            $errores_items[] = "Línea " . ($index + 1) . ": Producto no seleccionado o inválido.";
-            continue;
-        }
-        // ********** AÑADIDO: Asignar tipo para uso posterior **********
-        $items_nuevos[$index]['tipo'] = $productos_data[$codigo]['tipo'];
-        // *************************************************************
+    $total_venta = 0;
 
-        if (!is_numeric($cantidad) || $cantidad <= 0) {
-            $errores_items[] = "Línea " . ($index + 1) . ": La cantidad debe ser un número positivo.";
-            continue;
-        }
-        if (!is_numeric($precio) || $precio <= 0) {
-            $errores_items[] = "Línea " . ($index + 1) . ": El precio unitario debe ser un valor positivo.";
-            continue;
-        }
-        
-        $total_nuevo += ($cantidad * $precio);
-    }
-    
-    if (!empty($errores_items)) {
-        $error = "Errores en el detalle de la venta: <br>" . implode("<br>", $errores_items);
-    } elseif ($total_nuevo <= 0) {
-        $error = "El total de la venta debe ser mayor a cero.";
+    if (empty($items)) {
+        $error = "La venta debe tener al menos un producto.";
+    } elseif ($cliente_id <= 0) {
+        $error = "Seleccione un cliente válido.";
     } else {
-        
-        $conn->begin_transaction(); 
         try {
+            $conn->begin_transaction();
+
+            // A. REVERTIR STOCK DE LA VENTA ANTERIOR
+            // Consultamos qué había guardado en la BD (no confiamos en el POST anterior)
+            $stmt_old = $conn->prepare("SELECT codigo_producto, cantidad FROM detalle_venta WHERE venta_id = ?");
+            $stmt_old->bind_param("i", $venta_id);
+            $stmt_old->execute();
+            $res_old = $stmt_old->get_result();
             
-            // 1. REVERTIR STOCK ORIGINAL (CORRECCIÓN AQUÍ: No se usa prepared statement con el nombre de la tabla)
-            foreach ($detalle_original_post as $original) {
-                $codigo_orig = $original['codigo'];
-                $cantidad_orig = $original['cantidad'];
+            while($old_item = $res_old->fetch_assoc()) {
+                $cod = $old_item['codigo_producto'];
+                $cant = $old_item['cantidad'];
                 
-                // Obtener el tipo de producto
-                $sql_get_tipo = "SELECT 'maquina' as tipo FROM maquinas WHERE codigo = ? 
-                                 UNION ALL 
-                                 SELECT 'repuesto' as tipo FROM repuestos WHERE codigo = ?";
-                $stmt_get_tipo = $conn->prepare($sql_get_tipo);
-                $stmt_get_tipo->bind_param("ss", $codigo_orig, $codigo_orig);
-                $stmt_get_tipo->execute();
-                $tipo_result = $stmt_get_tipo->get_result()->fetch_assoc();
-                $stmt_get_tipo->close();
-                
-                $tabla_stock = $tipo_result ? ($tipo_result['tipo'] == 'maquina' ? 'maquinas' : 'repuestos') : null;
-                
-                if ($tabla_stock) {
-                    // Consulta directa ya que el nombre de la tabla no puede ser un placeholder de prepared statement
-                    $conn->query("UPDATE {$tabla_stock} SET stock = stock + $cantidad_orig WHERE codigo = '{$codigo_orig}'");
+                // Buscar tipo para saber a qué tabla devolver
+                $chk = $conn->query("SELECT 'maquina' as tipo FROM maquinas WHERE codigo = '$cod' UNION SELECT 'repuesto' as tipo FROM repuestos WHERE codigo = '$cod'");
+                if ($row_tipo = $chk->fetch_assoc()) {
+                    $tabla = ($row_tipo['tipo'] == 'maquina') ? 'maquinas' : 'repuestos';
+                    $conn->query("UPDATE $tabla SET stock = stock + $cant WHERE codigo = '$cod'");
                 }
             }
-            
-            // 2. ELIMINAR DETALLE VIEJO
+            $stmt_old->close();
+
+            // B. BORRAR DETALLES VIEJOS
             $conn->query("DELETE FROM detalle_venta WHERE venta_id = $venta_id");
 
-            // 3. INSERTAR DETALLE NUEVO (CORRECCIÓN AQUÍ: Uso de codigo_maquina y codigo_repuesto)
-            $sql_insert_detalle = "INSERT INTO detalle_venta (venta_id, cantidad, precio_unitario, codigo_maquina, codigo_repuesto) 
-                                   VALUES (?, ?, ?, ?, ?)";
-            $stmt_insert_detalle = $conn->prepare($sql_insert_detalle);
-            
-            // 4. AJUSTAR STOCK NUEVO
-            foreach ($items_nuevos as $item) {
-                $codigo = limpiar($item['codigo']);
-                $cantidad = limpiar($item['cantidad']);
-                $precio = limpiar($item['precio_unitario']);
-                $tipo = $item['tipo']; // Tipo ya asignado en la validación
-                
-                // Determinar qué columna usar
-                $codigo_maquina = ($tipo === 'maquina') ? $codigo : NULL;
-                $codigo_repuesto = ($tipo === 'repuesto') ? $codigo : NULL;
+            // C. VALIDAR Y PROCESAR NUEVOS ITEMS
+            foreach ($items as $item) {
+                $codigo = $item['codigo'];
+                $cantidad = intval($item['cantidad']);
+                $precio = floatval($item['precio']);
+                $total_venta += ($precio * $cantidad);
 
-                // Insertar detalle con las columnas correctas
-                $stmt_insert_detalle->bind_param("iidsi", $venta_id, $cantidad, $precio, $codigo_maquina, $codigo_repuesto);
-                $stmt_insert_detalle->execute();
+                // Verificar Stock DISPONIBLE (Ahora el stock incluye lo que acabamos de devolver en el paso A)
+                $stmt_check = $conn->prepare("SELECT stock, 'maquina' as tipo FROM maquinas WHERE codigo = ? UNION SELECT stock, 'repuesto' as tipo FROM repuestos WHERE codigo = ?");
+                $stmt_check->bind_param("ss", $codigo, $codigo);
+                $stmt_check->execute();
+                $res_check = $stmt_check->get_result()->fetch_assoc();
+                $stmt_check->close();
+
+                if (!$res_check) throw new Exception("El producto $codigo ya no existe en el catálogo.");
                 
-                // Ajustar Stock
-                $tabla_stock_nuevo = ($tipo == 'maquina') ? 'maquinas' : 'repuestos';
-                
-                // Consulta directa de stock
-                $conn->query("UPDATE {$tabla_stock_nuevo} SET stock = stock - $cantidad WHERE codigo = '{$codigo}'");
+                if ($res_check['stock'] < $cantidad) {
+                    throw new Exception("Stock insuficiente para el producto $codigo. Disponible: " . $res_check['stock']);
+                }
+
+                // Insertar nuevo detalle
+                $stmt_ins = $conn->prepare("INSERT INTO detalle_venta (venta_id, codigo_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)");
+                $stmt_ins->bind_param("isid", $venta_id, $codigo, $cantidad, $precio);
+                $stmt_ins->execute();
+                $stmt_ins->close();
+
+                // Descontar nuevo stock
+                $tabla = ($res_check['tipo'] == 'maquina') ? 'maquinas' : 'repuestos';
+                $stmt_upd = $conn->prepare("UPDATE $tabla SET stock = stock - ? WHERE codigo = ?");
+                $stmt_upd->bind_param("is", $cantidad, $codigo);
+                $stmt_upd->execute();
+                $stmt_upd->close();
             }
-            $stmt_insert_detalle->close();
 
-            // 5. ACTUALIZAR CABECERA
-            $sql_update_venta = "UPDATE ventas 
-                                 SET empresas_id = ?, total = ?, descripcion = ?, fecha_venta = ? 
-                                 WHERE id = ?";
-            $stmt_update_venta = $conn->prepare($sql_update_venta);
-            $stmt_update_venta->bind_param("idssi", $cliente_id_nuevo, $total_nuevo, $descripcion_nueva, $fecha_nueva, $venta_id);
-            $stmt_update_venta->execute();
-            $stmt_update_venta->close();
+            // D. ACTUALIZAR CABECERA DE VENTA
+            $stmt_head = $conn->prepare("UPDATE ventas SET empresas_id=?, fecha_venta=?, num_comprobante=?, total=?, descripcion=?, usuario_id=? WHERE id=?");
+            $stmt_head->bind_param("issssii", $cliente_id, $fecha, $num_comprobante, $total_venta, $descripcion, $_SESSION['user_id'], $venta_id);
+            $stmt_head->execute();
+            $stmt_head->close();
 
-            
             $conn->commit();
-            $_SESSION['mensaje_exito'] = "Venta ID: $venta_id actualizada exitosamente. Nuevo Total: $" . number_format($total_nuevo, 2);
-            header("Location: index.php?success=venta_actualizada");
+            $_SESSION['mensaje_exito'] = "Venta actualizada correctamente.";
+            header("Location: index.php");
             exit();
-            
+
         } catch (Exception $e) {
             $conn->rollback();
-            $error = "Error al actualizar la venta. Transacción revertida. Detalle: " . $e->getMessage();
+            $error = "Error al actualizar: " . $e->getMessage();
+            // Recargamos datos para no perder lo que el usuario escribió
+            $venta['empresas_id'] = $cliente_id;
+            $venta['fecha_venta'] = $fecha;
+            $venta['num_comprobante'] = $num_comprobante;
+            $venta['descripcion'] = $descripcion;
         }
     }
-    
-    // Si hay error en POST, recarga el detalle nuevo para que el usuario no pierda el trabajo
-    $venta['empresas_id'] = $cliente_id_nuevo;
-    $venta['fecha_venta'] = $fecha_nueva;
-    $venta['descripcion'] = $descripcion_nueva;
-    
-    // Usar el detalle post en caso de error para rellenar el formulario
-    $detalle_original = $items_nuevos; 
-    $detalle_original_json = json_encode($items_nuevos);
-}
-
-
-if (isset($venta['empresas_id'])) {
-    $clientes_result->data_seek(0);
 }
 ?>
 
 <?php include '../includes/header.php'; ?>
 
-<section class="form-container">
-    <h2>Editar Venta (ID: <?= htmlspecialchars($venta_id) ?>)</h2> 
+<div class="form-container" style="max-width: 1000px;">
+    <h2>Editar Venta #<?= $venta_id ?></h2>
     
-    <?php if(!empty($error)): ?>
-        <div class="alert error"><?= $error ?></div>
-    <?php endif; ?>
-    
-    <form method="POST">
-        <input type="hidden" name="detalle_original_json" value='<?= htmlspecialchars($detalle_original_json, ENT_QUOTES) ?>'>
+    <?php if($error): ?><div class="alert error"><?= $error ?></div><?php endif; ?>
 
-        <div class="form-group">
-            <label for="cliente_id">Cliente (Empresa):</label>
-            <select id="cliente_id" name="cliente_id" required>
-                <option value="">Seleccione un cliente</option>
-                <?php $clientes_result->data_seek(0); ?>
-                <?php while($cliente = $clientes_result->fetch_assoc()): ?>
-                <option 
-                    value="<?= htmlspecialchars($cliente['id']) ?>"
-                    <?= ($venta['empresas_id'] == $cliente['id']) ? 'selected' : '' ?>
-                >
-                    <?= htmlspecialchars($cliente['nombre']) ?>
-                </option>
-                <?php endwhile; ?>
-            </select>
-        </div>
-        
-        <div class="form-group" style="margin-bottom: 20px;">
-            <label for="fecha">Fecha:</label>
-            <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars(date('Y-m-d', strtotime($venta['fecha_venta']))) ?>" required>
-        </div>
-
-        <h3>Detalle de Productos</h3>
-        <div id="detalle-productos-container">
+    <form method="POST" id="form-venta">
+        <div style="background:#f9f9f9; padding:15px; border-radius:5px; margin-bottom:20px; display:flex; gap:15px; flex-wrap:wrap;">
+            <div style="flex:2;">
+                <label>Cliente:</label>
+                <select name="cliente_id" required style="width:100%;">
+                    <?php while($c = $clientes->fetch_assoc()): ?>
+                        <option value="<?= $c['id'] ?>" <?= $c['id'] == $venta['empresas_id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($c['nombre']) ?> (<?= $c['rif'] ?>)
+                        </option>
+                    <?php endwhile; ?>
+                </select>
             </div>
-        
-        <div class="total-summary" style="text-align: right; margin-top: 15px;">
-            <label for="total_venta" style="font-weight: bold; margin-right: 10px;">TOTAL VENTA ($):</label>
-            <input type="text" id="total_venta" name="total_venta_display" readonly style="font-weight: bold; width: 120px; text-align: right;">
+            <div style="flex:1;">
+                <label>Fecha:</label>
+                <input type="date" name="fecha" value="<?= htmlspecialchars($venta['fecha_venta']) ?>" required>
+            </div>
+            <div style="flex:1;">
+                <label>N° Factura/Control:</label>
+                <input type="text" name="num_comprobante" value="<?= htmlspecialchars($venta['num_comprobante']) ?>">
+            </div>
         </div>
 
-        <div class="form-actions" style="justify-content: flex-start; margin-top: 10px;">
-            <button type="button" id="agregar-producto" class="btn secondary">
-                <i class="fas fa-plus"></i> Agregar Producto
-            </button>
+        <table class="table" id="tabla-productos">
+            <thead>
+                <tr style="background:#eee;">
+                    <th width="40%">Producto</th>
+                    <th width="15%">Stock Actual</th>
+                    <th width="15%">Cantidad</th>
+                    <th width="15%">Precio Unit.</th>
+                    <th width="15%">Subtotal</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="lista-items">
+                </tbody>
+        </table>
+
+        <button type="button" class="btn secondary" onclick="agregarItem()" style="margin-top:10px;">
+            <i class="fas fa-plus"></i> Agregar Producto
+        </button>
+
+        <div style="text-align:right; margin-top:20px; font-size:1.2em;">
+            <strong>Total a Pagar: $<span id="total-display"><?= number_format($venta['total'], 2) ?></span></strong>
         </div>
 
-        <div class="form-group" style="margin-top: 20px;">
-            <label for="descripcion">Notas/Descripción de la Venta:</label>
-            <textarea id="descripcion" name="descripcion" rows="4"><?= htmlspecialchars($venta['descripcion']) ?></textarea>
+        <div class="form-group" style="margin-top:15px;">
+            <label>Observaciones:</label>
+            <textarea name="descripcion" rows="2"><?= htmlspecialchars($venta['descripcion']) ?></textarea>
         </div>
-        
+
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Actualizar Venta</button>
+            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
             <a href="index.php" class="btn secondary">Cancelar</a>
         </div>
     </form>
-</section>
-
-<?php ob_start(); // Inicia el buffer de salida para capturar HTML ?>
-<option value="">Seleccione Producto</option>
-<?php 
-$productos_result->data_seek(0);
-while($producto = $productos_result->fetch_assoc()): 
-?>
-<option 
-    value="<?= htmlspecialchars($producto['codigo']) ?>" 
-    data-precio="<?= htmlspecialchars($producto['precio_venta'] ?? '0.00') ?>"
-    data-stock="<?= htmlspecialchars($producto['stock'] ?? '0') ?>"
-    data-tipo="<?= htmlspecialchars($producto['tipo']) ?>"
->
-    <?= htmlspecialchars($producto['nombre']) ?> (Stock: <?= htmlspecialchars($producto['stock']) ?>)
-</option>
-<?php endwhile; ?>
-<?php $producto_options_html = ob_get_clean(); // Captura y limpia el buffer ?>
-
-<style>
-/* Estilo para cada grupo de producto */
-.product-group {
-    border: 1px solid #ddd;
-    padding: 15px;
-    margin-bottom: 10px;
-    border-radius: 6px;
-    background-color: #f9f9f9;
-}
-.product-group .form-group-inline {
-    display: flex; 
-    align-items: center;
-    margin-bottom: 10px;
-    gap: 10px; 
-}
-.product-group .form-group-inline label {
-    flex-basis: 150px; 
-    font-weight: bold;
-}
-.product-group .form-group-inline input[type="number"],
-.product-group .form-group-inline input[type="text"],
-.product-group .form-group-inline select {
-    flex-grow: 1; 
-    max-width: 250px; 
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-.product-group .btn-eliminar-item {
-    background-color: #dc3545;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    margin-left: auto; 
-}
-</style>
-
+</div>
 
 <script>
-    const productoOptionsHtml = `<?= $producto_options_html ?>`;
-    let itemCount = 0; // Usado para el índice del array POST
-    const initialDetail = JSON.parse('<?= $detalle_original_json ?>'); // Detalle cargado desde PHP
+const productos = <?= $json_productos ?>;
+const detallesIniciales = <?= $json_detalles ?>;
 
-    // Función para calcular el total general
-    function calcularTotales() {
-        let totalGeneral = 0;
-        document.querySelectorAll('.product-group').forEach(group => {
-            const cantidadInput = group.querySelector('.item-cantidad');
-            const precioInput = group.querySelector('.item-precio');
-            const subtotalLabel = group.querySelector('.item-subtotal-label');
+function agregarItem(data = null) {
+    const index = document.querySelectorAll('#lista-items tr').length;
+    const tr = document.createElement('tr');
+    
+    // Si viene data (es una fila existente), usamos sus valores
+    const codigoVal = data ? data.codigo : '';
+    const cantVal = data ? data.cantidad : 1;
+    const precioVal = data ? data.precio_unitario : '';
+    
+    let options = '<option value="">-- Seleccionar --</option>';
+    let stockDisplay = '';
 
-            const cantidad = parseFloat(cantidadInput.value) || 0;
-            const precio = parseFloat(precioInput.value) || 0;
-            
-            const subtotal = cantidad * precio;
-            
-            subtotalLabel.textContent = subtotal.toFixed(2);
-            totalGeneral += subtotal;
-        });
-
-        document.getElementById('total_venta').value = totalGeneral.toFixed(2);
-    }
-
-    // Función que crea un nuevo grupo de detalle
-    function agregarGrupoDetalle(productoData = {}) {
-        const container = document.getElementById('detalle-productos-container');
+    productos.forEach(p => {
+        const selected = p.codigo === codigoVal ? 'selected' : '';
+        // Si es el producto seleccionado, guardamos su stock para mostrarlo
+        if(selected) stockDisplay = p.stock;
         
-        const newGroup = document.createElement('div');
-        newGroup.className = 'product-group';
-        newGroup.dataset.index = itemCount;
-        
-        // Define el valor y estado seleccionado (selected) del select
-        // Se usa una pequeña manipulación de string para marcar el item seleccionado si existe
-        let optionsWithSelected = productoOptionsHtml;
-        if (productoData.codigo) {
-            optionsWithSelected = productoOptionsHtml.replace(
-                `value="${productoData.codigo}"`, 
-                `value="${productoData.codigo}" selected`
-            );
-        }
-
-        newGroup.innerHTML = `
-            <div class="form-group-inline">
-                <label>Producto:</label>
-                <select name="items[${itemCount}][codigo]" class="item-codigo" required>
-                    ${optionsWithSelected}
-                </select>
-                <button type="button" class="btn-danger btn-eliminar-item" title="Eliminar Producto">
-                    <i class="fas fa-trash"></i> Eliminar
-                </button>
-            </div>
-            
-            <div class="form-group-inline">
-                <label>Cantidad:</label>
-                <input type="number" name="items[${itemCount}][cantidad]" class="item-cantidad" min="1" value="${productoData.cantidad || '1'}" required>
-            </div>
-            
-            <div class="form-group-inline">
-                <label>Precio Unitario ($):</label>
-                <input type="number" name="items[${itemCount}][precio_unitario]" class="item-precio" step="0.01" min="0.01" value="${productoData.precio_unitario || ''}" required>
-            </div>
-
-            <div class="form-group-inline" style="border-top: 1px dashed #ccc; padding-top: 5px;">
-                <label>Subtotal ($):</label>
-                <span class="item-subtotal-label" style="font-weight: bold; flex-grow: 1; text-align: right;">0.00</span>
-            </div>
-        `;
-
-        container.appendChild(newGroup);
-
-        // Añadir listeners a los nuevos campos
-        const cantidadInput = newGroup.querySelector('.item-cantidad');
-        const precioInput = newGroup.querySelector('.item-precio');
-        const codigoSelect = newGroup.querySelector('.item-codigo');
-        const eliminarButton = newGroup.querySelector('.btn-eliminar-item');
-
-        codigoSelect.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            const precio = selectedOption.getAttribute('data-precio');
-            if (precio) {
-                precioInput.value = parseFloat(precio).toFixed(2);
-            }
-            calcularTotales();
-        });
-
-        // Listener para calcular al cambiar cantidad o precio
-        cantidadInput.addEventListener('input', calcularTotales);
-        precioInput.addEventListener('input', calcularTotales);
-
-        // Listener para eliminar el grupo
-        eliminarButton.addEventListener('click', function() {
-            newGroup.remove();
-            calcularTotales();
-        });
-        
-        itemCount++;
-        // Solo calcular totales si no se está cargando el detalle inicial
-        if (productoData.codigo) {
-            calcularTotales();
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        const agregarButton = document.getElementById('agregar-producto');
-
-        // Evento para agregar nueva línea de producto
-        agregarButton.addEventListener('click', function() {
-            agregarGrupoDetalle();
-        });
-        
-        // --- Cargar Detalle de la Venta Original ---
-        if (initialDetail && initialDetail.length > 0) {
-            initialDetail.forEach(item => {
-                agregarGrupoDetalle({
-                    codigo: item.codigo,
-                    cantidad: item.cantidad,
-                    precio_unitario: item.precio_unitario 
-                });
-            });
-        } else {
-             // Si no hay detalles (lo cual no debería pasar), agrega uno vacío
-             agregarGrupoDetalle();
-        }
-
-        // Asegurar que el total se calcule al final de la carga
-        calcularTotales();
+        options += `<option value="${p.codigo}" data-precio="${p.precio_venta}" data-stock="${p.stock}" ${selected}>${p.nombre}</option>`;
     });
 
+    tr.innerHTML = `
+        <td>
+            <select name="items[${index}][codigo]" class="form-control select-prod" required onchange="actualizarFila(this)">
+                ${options}
+            </select>
+        </td>
+        <td><input type="text" class="input-stock" value="${stockDisplay}" disabled style="width:60px; background:#eee;"></td>
+        <td><input type="number" name="items[${index}][cantidad]" class="form-control input-cant" min="1" value="${cantVal}" required onchange="calcularTotal()"></td>
+        <td><input type="number" name="items[${index}][precio]" class="form-control input-precio" step="0.01" value="${precioVal}" required onchange="calcularTotal()"></td>
+        <td class="td-subtotal">$0.00</td>
+        <td><button type="button" class="btn-danger btn-sm" onclick="eliminarFila(this)">X</button></td>
+    `;
+    document.getElementById('lista-items').appendChild(tr);
+    
+    // Calcular subtotal inicial de esta fila
+    if(data) {
+        const sub = cantVal * precioVal;
+        tr.querySelector('.td-subtotal').textContent = '$' + sub.toFixed(2);
+    }
+}
+
+function actualizarFila(select) {
+    const tr = select.closest('tr');
+    const option = select.options[select.selectedIndex];
+    
+    if (option.value) {
+        tr.querySelector('.input-precio').value = option.dataset.precio;
+        tr.querySelector('.input-stock').value = option.dataset.stock;
+        // Validar máximo (Opcional, porque al editar recuperamos stock y el límite real es stock_bd + cantidad_devuelta)
+        // tr.querySelector('.input-cant').max = option.dataset.stock; 
+    }
+    calcularTotal();
+}
+
+function calcularTotal() {
+    let total = 0;
+    document.querySelectorAll('#lista-items tr').forEach(tr => {
+        const cant = parseFloat(tr.querySelector('.input-cant').value) || 0;
+        const precio = parseFloat(tr.querySelector('.input-precio').value) || 0;
+        const sub = cant * precio;
+        tr.querySelector('.td-subtotal').textContent = '$' + sub.toFixed(2);
+        total += sub;
+    });
+    document.getElementById('total-display').textContent = total.toFixed(2);
+}
+
+function eliminarFila(btn) {
+    btn.closest('tr').remove();
+    calcularTotal();
+}
+
+// Cargar detalles al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+    if (detallesIniciales.length > 0) {
+        detallesIniciales.forEach(item => agregarItem(item));
+        calcularTotal();
+    } else {
+        agregarItem(); // Fila vacía si es nuevo (aunque esto es editar)
+    }
+});
 </script>
 
 <?php include '../includes/footer.php'; ?>

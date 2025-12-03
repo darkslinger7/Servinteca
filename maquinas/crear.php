@@ -12,38 +12,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $modelo = limpiar($_POST['modelo']);
     $descripcion = limpiar($_POST['descripcion']);
     
-    // 1. CAPTURAR EL NUEVO CAMPO precio_venta
     $precio_venta = floatval($_POST['precio_venta'] ?? 0); 
     
-    // 1. CAPTURAR EL NUEVO CAMPO stock
-    $stock = intval($_POST['stock'] ?? 0); 
-
-    // VALIDACIÓN DE PRECIO Y STOCK
     if ($precio_venta <= 0) {
         $error = "El precio de venta debe ser un valor positivo.";
-    } elseif ($stock < 0) {
-        $error = "El stock no puede ser negativo.";
     } else {
-        // 2. MODIFICAR LA CONSULTA INSERT
-        // Columnas añadidas: precio_venta y stock
+        $stock_inicial = 0;
+
         $sql = "INSERT INTO maquinas (nombre, codigo, modelo, descripcion, precio_venta, stock) 
                 VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         
-        // Parámetros: ssss (strings) d (decimal/double) i (integer)
-        $stmt->bind_param("ssssdi", $nombre, $codigo, $modelo, $descripcion, $precio_venta, $stock);
+        $stmt->bind_param("ssssdi", $nombre, $codigo, $modelo, $descripcion, $precio_venta, $stock_inicial);
         
         if ($stmt->execute()) {
-            $mensajeExito = "Máquina registrada exitosamente";
-            
-            // Limpiar variables POST después de éxito
-            $_POST['nombre'] = $_POST['codigo'] = $_POST['modelo'] = $_POST['descripcion'] = $_POST['precio_venta'] = $_POST['stock'] = '';
+            $mensajeExito = "Ficha de máquina creada exitosamente (Stock inicial: 0)";
+            $_POST = array(); 
         } else {
-            // Error común: Duplicidad de código
             if ($conn->errno == 1062) { 
                 $error = "Error: El código de máquina ya existe.";
             } else {
-                $error = "Error al registrar la máquina: " . $conn->error;
+                $error = "Error al registrar: " . $conn->error;
             }
         }
     }
@@ -53,16 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <?php include '../includes/header.php'; ?>
 
 <section class="form-container">
-    <h2>Agregar nueva máquina</h2>
+    <h2>Registrar Nueva Máquina (Catálogo)</h2>
     
     <?php if($mensajeExito): ?>
         <div class="alert success">
             <?= $mensajeExito ?>
-            <script>
-                setTimeout(() => {
-                    window.location.href = 'index.php';
-                }, 2000);
-            </script>
+            <script>setTimeout(() => { window.location.href = 'index.php'; }, 2000);</script>
         </div>
     <?php endif; ?>
     
@@ -73,17 +58,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <form method="POST">
         <div class="form-group">
             <label for="nombre">Nombre de la Máquina:</label>
-            <input type="text" id="nombre" name="nombre" value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>" required>
+            <input type="text" id="nombre" name="nombre" value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>" required placeholder="Ej. Impresora Inkjet">
         </div>
         
         <div class="form-group">
-            <label for="codigo">Código:</label>
-            <input type="text" id="codigo" name="codigo" value="<?= htmlspecialchars($_POST['codigo'] ?? '') ?>" required>
+            <label for="codigo">Código Único:</label>
+            <input type="text" id="codigo" name="codigo" value="<?= htmlspecialchars($_POST['codigo'] ?? '') ?>" required placeholder="Ej. MQ-HIT-001">
         </div>
 
         <div class="form-group">
             <label for="modelo">Modelo:</label>
-            <input type="text" id="modelo" name="modelo" value="<?= htmlspecialchars($_POST['modelo'] ?? '') ?>" required>
+            <input type="text" id="modelo" name="modelo" value="<?= htmlspecialchars($_POST['modelo'] ?? '') ?>" required placeholder="Ej. UX-D160">
         </div>
         
         <div class="form-group">
@@ -91,18 +76,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <input type="number" id="precio_venta" name="precio_venta" step="0.01" min="0.01" value="<?= htmlspecialchars($_POST['precio_venta'] ?? '') ?>" required>
         </div>
         
-        <div class="form-group">
-            <label for="stock">Cantidad Disponible (Stock):</label>
-            <input type="number" id="stock" name="stock" min="0" value="<?= htmlspecialchars($_POST['stock'] ?? '0') ?>" required>
+        <div class="alert info" style="font-size: 0.9em; margin-bottom: 15px;">
+            <i class="fas fa-info-circle"></i> Nota: El stock inicial será 0. Para agregar unidades, ve al módulo de <strong>Compras</strong>.
         </div>
 
         <div class="form-group">
-            <label for="descripcion">Descripción de la Máquina:</label>
+            <label for="descripcion">Descripción:</label>
             <input type="text" id="descripcion" name="descripcion" value="<?= htmlspecialchars($_POST['descripcion'] ?? '') ?>" required>
         </div>
         
         <div class="form-actions">
-            <button type="submit" class="btn">Guardar</button>
+            <button type="submit" class="btn">Crear Ficha</button>
             <a href="index.php" class="btn secondary">Cancelar</a>
         </div>
     </form>

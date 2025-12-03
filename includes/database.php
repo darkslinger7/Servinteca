@@ -1,7 +1,7 @@
 <?php
 $host = "localhost";
 $user = "root";
-$pass = "";
+$pass = "1234";
 $db   = "servindtecadb";
 
 $conn = new mysqli($host, $user, $pass, $db);

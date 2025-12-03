@@ -1,11 +1,18 @@
 <?php
 session_start();
+// 1. IMPORTANTE: La conexión debe ir ANTES de cualquier consulta
 require_once '../includes/database.php';
 
+// Si no hay sesión, mandamos al login
+if (!isset($_SESSION['user_id'])) {
+    header("Location: /Servindteca/auth/login.php");
+    exit();
+}
 
 $mensaje = '';
 $tipoMensaje = '';
 
+// Lógica de mensajes (Mantenemos tu código original)
 if (isset($_GET['success'])) {
     $mensaje = match($_GET['success']) {
         'servicio_eliminado' => 'Servicio eliminado correctamente',
@@ -26,7 +33,7 @@ if (isset($_GET['error'])) {
     $tipoMensaje = 'error';
 }
 
-
+// 2. CONSULTA SQL MEJORADA (Traemos los datos nuevos)
 $sql = "SELECT s.*, e.nombre as empresa_nombre 
         FROM servicios s
         JOIN empresas e ON s.empresa_id = e.id
@@ -59,51 +66,73 @@ if ($result === false) {
         </a> 
     </div>
     
-    <?php if ($result->num_rows > 0): ?>
-        <table>
-            <thead>
-                <tr>
-                    <th>Fecha</th>
-                    <th>Empresa</th>
-                    <th>Descripción</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php while($servicio = $result->fetch_assoc()): ?>
-                <tr>
-                    <td><?= date('d/m/Y', strtotime($servicio['fecha'])) ?></td>
-                    <td><?= htmlspecialchars($servicio['empresa_nombre']) ?></td>
-                    <td><?= htmlspecialchars(substr($servicio['descripcion'], 0, 50)) ?>...</td>
-                    <td class="actions">
-                        <a href="editar.php?id=<?= $servicio['id'] ?>" class="btn-edit">
-                            <i class="fas fa-edit"></i> Editar
-                        </a>
-                        <button class="btn-danger btn-eliminar" data-id="<?= $servicio['id'] ?>">
-                            <i class="fas fa-trash"></i> Eliminar
-                        </button>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <div class="alert info">No hay servicios registrados</div>
-    <?php endif; ?>
+    <div style="overflow-x: auto;">
+        <?php if ($result->num_rows > 0): ?>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Empresa</th>
+                        <th>Equipo</th>       <th>Tipo</th>         <th>Horas</th>        <th>Descripción</th>
+                        <th>Prox. Visita</th> <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php while($servicio = $result->fetch_assoc()): ?>
+                    <tr>
+                        <td style="white-space: nowrap;"><?= date('d/m/Y', strtotime($servicio['fecha'])) ?></td>
+                        
+                        <td><strong><?= htmlspecialchars($servicio['empresa_nombre']) ?></strong></td>
+
+                        <td><?= htmlspecialchars($servicio['equipo_atendido'] ?? '-') ?></td>
+
+                        <td>
+                            <span style="padding: 2px 6px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85em;">
+                                <?= htmlspecialchars($servicio['tipo_servicio'] ?? 'General') ?>
+                            </span>
+                        </td>
+
+                        <td><?= $servicio['horas_uso'] ? number_format($servicio['horas_uso']) . ' hrs' : '-' ?></td>
+                        
+                        <td title="<?= htmlspecialchars($servicio['descripcion']) ?>">
+                            <?= htmlspecialchars(substr($servicio['descripcion'], 0, 50)) . (strlen($servicio['descripcion']) > 50 ? '...' : '') ?>
+                        </td>
+
+                        <td style="color: #d35400; font-weight: bold; white-space: nowrap;">
+                            <?= $servicio['proximo_servicio'] ? date('d/m/Y', strtotime($servicio['proximo_servicio'])) : '-' ?>
+                        </td>
+
+                        <td class="actions" style="white-space: nowrap;">
+                            <a href="editar.php?id=<?= $servicio['id'] ?>" class="btn-edit" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button class="btn-danger btn-eliminar" data-id="<?= $servicio['id'] ?>" title="Eliminar">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
+            <div class="alert info">No hay servicios registrados</div>
+        <?php endif; ?>
+    </div>
 </section>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     
+    // Ocultar mensaje temporalmente
     const mensaje = document.getElementById('mensaje-temporal');
     if (mensaje) {
         setTimeout(() => {
             mensaje.style.opacity = '0';
             setTimeout(() => mensaje.remove(), 500);
-        }, 2000);
+        }, 3000);
     }
 
-    
+    // Lógica para eliminar con formulario POST oculto (Seguridad)
     document.querySelectorAll('.btn-eliminar').forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -126,6 +155,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// Función de búsqueda
 function filtrarServicios() {
     const input = document.getElementById('buscar-servicio');
     const filter = input.value.toUpperCase();
@@ -134,9 +165,10 @@ function filtrarServicios() {
 
     for (let i = 1; i < tr.length; i++) {
         let mostrarFila = false;
+        // Buscamos en todas las celdas de la fila
         const celdas = tr[i].getElementsByTagName('td');
         
-        for (let j = 0; j < celdas.length - 1; j++) {
+        for (let j = 0; j < celdas.length - 1; j++) { // -1 para ignorar la columna acciones
             const txtValue = celdas[j].textContent || celdas[j].innerText;
             if (txtValue.toUpperCase().indexOf(filter) > -1) {
                 mostrarFila = true;
@@ -148,4 +180,5 @@ function filtrarServicios() {
     }
 }
 </script>
+
 <?php include '../includes/footer.php'; ?>

@@ -1,0 +1,47 @@
+<?php
+session_start();
+require_once '../includes/database.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+    header("Location: index.php"); exit();
+}
+
+$id = intval($_POST['id']);
+
+try {
+    $conn->begin_transaction();
+
+    // 1. Obtener items para devolverlos al stock
+    $stmt = $conn->prepare("SELECT codigo_producto, cantidad FROM detalle_venta WHERE venta_id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    
+    while($item = $res->fetch_assoc()) {
+        $cod = $item['codigo_producto'];
+        $cant = $item['cantidad'];
+        
+        // Determinar tabla (buscamos dónde existe el código)
+        $chk = $conn->query("SELECT 'maquina' as tipo FROM maquinas WHERE codigo = '$cod' UNION SELECT 'repuesto' as tipo FROM repuestos WHERE codigo = '$cod'");
+        $tipo = $chk->fetch_assoc()['tipo'];
+        $tabla = ($tipo == 'maquina') ? 'maquinas' : 'repuestos';
+
+        // Devolver stock
+        $conn->query("UPDATE $tabla SET stock = stock + $cant WHERE codigo = '$cod'");
+    }
+    $stmt->close();
+
+    // 2. Borrar Venta (Por cascada se borra detalle_venta si está configurado en BD, si no, borrar manual)
+    $conn->query("DELETE FROM detalle_venta WHERE venta_id = $id");
+    $conn->query("DELETE FROM ventas WHERE id = $id");
+
+    $conn->commit();
+    $_SESSION['mensaje_exito'] = "Venta anulada. Stock restaurado.";
+
+} catch (Exception $e) {
+    $conn->rollback();
+    $_SESSION['mensaje_exito'] = "Error al anular: " . $e->getMessage();
+}
+
+header("Location: index.php");
+?>

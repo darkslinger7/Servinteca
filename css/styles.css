@@ -1,11 +1,25 @@
-
+/* =========================================
+   1. VARIABLES Y CONFIGURACIÓN BASE
+   ========================================= */
 :root {
+    /* Paleta de Colores */
     --azul-rey: #002366;
+    --azul-oscuro: #001a4d;
     --azul-claro: #e6f2ff;
     --naranja: #FF8C00;
-    --gris: #f5f5f5;
     --blanco: #ffffff;
+    --gris: #f3f4f6;
     --texto: #333333;
+    
+    /* Estados */
+    --success: #22c55e;
+    --danger: #dc3545;
+    --warning: #f59e0b;
+    
+    /* Diseño */
+    --radio: 8px;
+    --sombra-suave: 0 4px 6px -1px rgba(0,0,0,0.1);
+    --sombra-fuerte: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 body {
@@ -22,741 +36,337 @@ body {
 
 main {
     flex: 1;
-    padding: 2rem 0;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
 }
 
+a { text-decoration: none; color: inherit; }
+ul { list-style: none; padding: 0; margin: 0; }
 
+/* =========================================
+   2. HEADER Y NAVBAR
+   ========================================= */
+header {
+    background: linear-gradient(135deg, var(--azul-rey) 0%, var(--azul-oscuro) 100%);
+    color: var(--blanco);
+    padding: 1.5rem 0; /* Un poco más de altura */
+    text-align: center;
+    box-shadow: var(--sombra-suave);
+}
+
+header h1 { margin: 0; font-size: 1.8rem; font-weight: 700; letter-spacing: 1px; }
+
+/* Barra de Navegación */
+nav {
+    background-color: var(--blanco);
+    padding: 0 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: center; /* CENTRADO TOTAL */
+    flex-wrap: wrap; /* Para pantallas pequeñas */
+    box-shadow: var(--sombra-suave);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+/* Enlaces del Nav */
+nav > a, 
+.dropbtn {
+    color: var(--texto);
+    font-weight: 600;
+    padding: 1rem 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+nav > a:hover, 
+.dropdown:hover .dropbtn {
+    color: var(--azul-rey);
+    background-color: var(--azul-claro);
+    border-bottom-color: var(--azul-rey);
+}
+
+/* Dropdown */
+.dropdown { position: relative; display: inline-block; }
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: var(--blanco);
+    min-width: 220px;
+    box-shadow: var(--sombra-fuerte);
+    z-index: 1001;
+    border-radius: 0 0 var(--radio) var(--radio);
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%); /* Centrar dropdown respecto al botón */
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+}
+
+.dropdown:hover .dropdown-content { display: block; animation: fadeIn 0.2s; }
+
+.dropdown-content a {
+    color: var(--texto);
+    padding: 12px 20px;
+    display: block;
+    text-align: left;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.dropdown-content a:hover {
+    background-color: var(--azul-claro);
+    color: var(--azul-rey);
+}
+
+.dropbtn::after { content: " \25BE"; font-size: 0.8em; margin-left: 5px; color: #999; }
+
+/* Botón Salir en Rojo */
+.logout { color: var(--danger) !important; }
+.logout:hover { background-color: #fee2e2 !important; border-bottom-color: var(--danger) !important; }
+
+/* =========================================
+   3. TABLAS MODERNAS
+   ========================================= */
+.empresas-list {
+    background-color: var(--blanco);
+    border-radius: var(--radio);
+    padding: 2rem;
+    box-shadow: var(--sombra-suave);
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.empresas-list h2 {
+    color: var(--azul-rey);
+    margin-bottom: 1.5rem;
+    font-size: 1.8rem;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 10px;
+}
+
+.table-responsive { overflow-x: auto; width: 100%; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    background-color: var(--blanco);
+}
+
+thead th {
+    background-color: var(--azul-rey);
+    color: var(--blanco);
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+}
+
+tbody td {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: middle;
+    color: #4b5563;
+}
+
+tbody tr:hover { background-color: #f8fafc; }
+
+/* Columna de Acciones Centrada */
+td.actions {
+    white-space: nowrap;
+    width: 1%;
+    text-align: center;
+}
+
+/* =========================================
+   4. BOTONES (Generales y Específicos)
+   ========================================= */
+.btn, .btn-new, .btn-edit, .btn-eliminar, .btn-primary, .btn-secondary, .btn-danger, .btn-logout, .btn-login {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    text-decoration: none;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.btn:hover { transform: translateY(-2px); box-shadow: var(--sombra-suave); }
+
+/* Colores */
+.btn-primary, .btn-new, .btn-login {
+    background-color: var(--azul-rey);
+    color: white;
+}
+.btn-primary:hover, .btn-new:hover, .btn-login:hover { background-color: var(--naranja); }
+
+.btn-secondary {
+    background-color: white;
+    color: var(--texto);
+    border: 1px solid #d1d5db;
+}
+.btn-secondary:hover { background-color: #f3f4f6; }
+
+.btn-edit { background-color: var(--warning); color: white; padding: 0.5rem 0.8rem; font-size: 0.85rem; }
+.btn-edit:hover { background-color: #d97706; }
+
+.btn-danger, .btn-eliminar, .btn-logout {
+    background-color: var(--danger);
+    color: white;
+}
+.btn-danger:hover, .btn-eliminar:hover, .btn-logout:hover { background-color: #b91c1c; }
+
+/* =========================================
+   5. ESTILOS DEL INDEX PRINCIPAL (Restaurados)
+   ========================================= */
 .welcome-container {
     background-color: var(--blanco);
-    max-width: 800px;
-    margin: 2rem auto;
-    padding: 2.5rem;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 35, 102, 0.1);
+    max-width: 900px;
+    margin: 3rem auto;
+    padding: 3rem;
+    border-radius: var(--radio);
     text-align: center;
-    border-top: 4px solid var(--azul-rey);
+    box-shadow: var(--sombra-fuerte);
+    border-top: 5px solid var(--azul-rey);
 }
 
 .welcome-title {
     color: var(--azul-rey);
-    font-size: 2.2rem;
+    font-size: 2.5rem;
     margin-bottom: 1.5rem;
-    font-weight: 600;
+    font-weight: 700;
 }
-
 
 .user-panel {
     margin-top: 2rem;
 }
 
 .user-greeting {
-    font-size: 1.3rem;
+    font-size: 1.4rem;
     color: var(--texto);
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
 }
 
-.user-greeting strong {
-    color: var(--azul-rey);
-}
-
+.user-greeting strong { color: var(--azul-rey); }
 
 .action-buttons {
     display: flex;
-    gap: 1.2rem;
     justify-content: center;
     flex-wrap: wrap;
-    margin-top: 2rem;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-.btn {
-    display: inline-block;
-    padding: 0.8rem 1.8rem;
-    border-radius: 6px;
-    font-weight: 500;
-    text-decoration: none;
-    transition: all 0.3s ease;
+/* Ajuste para que los botones del index sean más grandes */
+.user-panel .btn {
+    padding: 1rem 1.5rem;
     font-size: 1rem;
-}
-
-.btn-primary {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-    border: 2px solid var(--azul-rey);
-}
-
-.btn-primary:hover {
-    background-color: var(--naranja);
-    border-color: var(--naranja);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.btn-logout {
-    background-color: #dc3545;
-    color: var(--blanco);
-    border: 2px solid #dc3545;
-}
-
-.btn-logout:hover {
-    background-color: #c82333;
-    border-color: #c82333;
+    min-width: 160px;
 }
 
 .login-prompt {
     margin-top: 2rem;
+    padding: 2rem;
+    background-color: var(--azul-claro);
+    border-radius: var(--radio);
 }
 
 .login-prompt p {
     font-size: 1.2rem;
-    color: #555;
-    margin-bottom: 2rem;
-}
-
-.btn-login {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-    padding: 0.9rem 2.2rem;
-    font-size: 1.1rem;
-}
-
-
-@media (max-width: 768px) {
-    .welcome-container {
-        margin: 1rem;
-        padding: 1.5rem;
-    }
-    
-    .welcome-title {
-        font-size: 1.8rem;
-    }
-    
-    .action-buttons {
-        flex-direction: column;
-        gap: 0.8rem;
-    }
-    
-    .btn {
-        width: 100%;
-        text-align: center;
-    }
-}
-
-header {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-    padding: 1rem 0;
-    text-align: center;
-}
-
-header .logo {
-    height: 60px;
-    margin-bottom: 0.5rem;
-}
-
-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 500;
-}
-
-nav {
-    background-color: #001a4d;
-    padding: 0.8rem 0;
-    text-align: center;
-}
-
-nav a {
-    color: var(--blanco);
-    text-decoration: none;
-    margin: 0 1rem;
-    font-weight: 500;
-    transition: color 0.3s;
-}
-
-nav a:hover {
-    color: var(--naranja);
-}
-
-footer {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-    text-align: center;
-    padding: 1.5rem 0;
-    margin-top: auto;
-}
-
-.contenedor-redes {
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
-    margin-top: 1rem;
-}
-
-.redsocial img {
-    width: 30px;
-    height: 30px;
-    transition: transform 0.3s;
-}
-
-.redsocial img:hover {
-    transform: scale(1.2);
-}
-
-.login-container {
-    width: 100%;
-    max-width: 400px;
-    margin: 0 auto;
-    padding: 2rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    text-align: center;
-}
-
-.company-header h2 {
-    color: #002366;
-    font-size: 1.5rem;
-    margin-bottom: 0.2rem;
-}
-
-.company-header h3 {
-    color: #002366;
-    font-size: 1.2rem;
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-}
-
-.rif {
-    color: #666;
-    font-size: 0.9rem;
-    margin-bottom: 2rem;
-}
-
-.login-title {
-    color: #002366;
-    font-size: 1.8rem;
-    margin-bottom: 2rem;
-}
-
-.login-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    width: 100%;
-}
-
-.form-group label {
-    color: #002366;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    font-size: 1rem;
-}
-
-.form-group input {
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 1rem;
-    box-sizing: border-box;
-}
-
-
-.login-button {
-    width: 100%;
-    padding: 0.8rem;
-    background-color: #002366;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-.login-button:hover {
-    background-color: #001a4d;
-}
-
-.login-logo {
-    height: 175px; 
+    color: var(--azul-rey);
     margin-bottom: 1.5rem;
-    object-fit: contain; 
 }
 
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-}
-
-.modal-content {
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-.btn.danger {
-    background-color: #dc3545;
-    color: white;
-}
-
-.btn.danger:hover {
-    background-color: #c82333;
-}
-
-.btn.small {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.9rem;
-}
-
-.alert {
-    padding: 15px;
-    margin-bottom: 20px;
-    border-radius: 4px;
-    font-weight: 500;
-}
-
-.alert.success {
-    background-color: #dff0d8;
-    color: #3c763d;
-    border-left: 4px solid #3c763d;
-}
-
-.alert.error {
-    background-color: #f2dede;
-    color: #a94442;
-    border-left: 4px solid #a94442;
-}
-
+/* =========================================
+   6. FORMULARIOS Y BUSCADORES
+   ========================================= */
 .form-container {
     background-color: var(--blanco);
-    max-width: 800px;
+    max-width: 850px;
     margin: 2rem auto;
-    padding: 2.5rem;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 35, 102, 0.1);
+    padding: 3rem;
+    border-radius: var(--radio);
+    box-shadow: var(--sombra-fuerte);
     border-top: 5px solid var(--azul-rey);
 }
 
 .form-container h2 {
     color: var(--azul-rey);
-    font-size: 1.8rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--azul-claro);
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 1rem;
 }
 
-.form-group {
-    margin-bottom: 1.8rem;
-}
+.form-group { margin-bottom: 1.5rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; color: var(--azul-rey); font-weight: 600; }
 
-.form-group label {
-    display: block;
-    margin-bottom: 0.6rem;
-    color: var(--azul-rey);
-    font-weight: 500;
-    font-size: 1rem;
-}
-
-.form-group input {
+.form-group input, .form-group select, .form-group textarea {
     width: 100%;
     padding: 0.8rem 1rem;
     border: 1px solid #d1d5db;
     border-radius: 6px;
     font-size: 1rem;
-    transition: all 0.3s ease;
     background-color: #f9fafb;
-}
-
-.form-group input:focus {
-    border-color: var(--azul-rey);
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(0, 35, 102, 0.1);
-    background-color: var(--blanco);
-}
-
-.form-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 2rem;
-}
-
-.btn {
-    padding: 0.8rem 1.5rem;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border: none;
-    font-size: 1rem;
-    text-align: center;
-    text-decoration: none;
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.btn-primary {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-}
-
-.btn-primary:hover {
-    background-color: var(--naranja);
-}
-
-.btn-secondary {
-    background-color: #6b7280;
-    color: var(--blanco);
-}
-
-.btn-secondary:hover {
-    background-color: #4b5563;
-}
-
-.btn-danger {
-    background-color: #dc3545;
-    color: var(--blanco);
-}
-
-.btn-danger:hover {
-    background-color: #bb2d3b;
-}
-
-.empresas-list {
-    background-color: var(--blanco);
-    border-radius: 10px;
-    padding: 2rem;
-    box-shadow: 0 4px 15px rgba(0, 35, 102, 0.1);
-    margin: 2rem auto;
-    max-width: 1200px;
-}
-
-.empresas-list h2 {
-    color: var(--azul-rey);
-    margin-bottom: 1.5rem;
-}
-
-.actions {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-#buscar-empresa {
-    padding: 0.6rem 1rem;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    min-width: 250px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1.5rem;
-    background-color: var(--blanco);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-th, td {
-    padding: 1rem;
-    text-align: left;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-th {
-    background-color: var(--azul-rey);
-    color: var(--blanco);
-    font-weight: 500;
-}
-
-tr:nth-child(even) {
-    background-color: var(--azul-claro);
-}
-
-tr:hover {
-    background-color: rgba(0, 35, 102, 0.05);
-}
-
-.actions-cell {
-    white-space: nowrap;
-}
-.alert {
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    animation: fadeIn 0.5s ease-out;
-}
-
-.alert.success {
-    background-color: #f0fdf4;
-    color: #166534;
-    border-left: 4px solid #22c55e;
-}
-
-.alert.error {
-    background-color: #fef2f2;
-    color: #b91c1c;
-    border-left: 4px solid #ef4444;
-}
-
-.alert i {
-    margin-right: 0.8rem;
-    font-size: 1.2rem;
-}
-
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.3s ease;
-}
-
-.modal.active {
-    opacity: 1;
-    visibility: visible;
-}
-
-.modal-content {
-    background-color: var(--blanco);
-    padding: 2rem;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    transform: translateY(-20px);
-    transition: transform 0.3s ease;
-}
-
-.modal.active .modal-content {
-    transform: translateY(0);
-}
-
-.modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@media (max-width: 768px) {
-    .form-container,
-    .empresas-list {
-        padding: 1.5rem;
-        margin: 1rem;
-    }
-    
-    .form-actions,
-    .modal-actions {
-        flex-direction: column;
-    }
-    
-    .btn {
-        width: 100%;
-    }
-    
-    table {
-        display: block;
-        overflow-x: auto;
-    }
-    
-    .actions {
-        flex-direction: column;
-    }
-    
-    #buscar-empresa {
-        width: 100%;
-    }
-}
-
-.btn-new {
-    background-color: #22c55e;
-    color: white;
-    border: none;
-    padding: 0.6rem 1.2rem;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.btn-new:hover {
-    background-color: #16a34a;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(34, 197, 94, 0.3);
-}
-
-.btn-new i {
-    font-size: 1.1rem;
-}
-
-.btn-edit {
-    background-color: #3b82f6;
-    color: white;
-    border: none;
-    padding: 0.4rem 0.8rem;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.btn-edit:hover {
-    background-color: #2563eb;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
-}
-
-.btn-edit i {
-    font-size: 0.9rem;
-}
-
-.btn-danger {
-    background-color: #ef4444;
-    color: white;
-    border: none;
-    padding: 0.4rem 0.8rem;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.btn-danger:hover {
-    background-color: #dc2626;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
-}
-/* --- Estilos para la tabla de Detalle de Venta en crear.php --- */
-
-.detalle-venta-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-}
-
-.detalle-venta-table th, 
-.detalle-venta-table td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
-}
-
-.detalle-venta-table thead th {
-    background-color: #007bff; /* Color azul para encabezados */
-    color: white;
-    text-align: center;
-}
-
-/* Controla el tamaño de los inputs y selects dentro de la tabla */
-.detalle-venta-table input[type="number"],
-.detalle-venta-table input[type="text"],
-.detalle-venta-table select {
-    /* Hacemos que ocupen casi toda la celda pero con un ancho máximo razonable */
-    width: 95%; 
-    padding: 5px;
     box-sizing: border-box;
-    font-size: 14px; /* Un poco más pequeño que el formulario principal */
-    border: 1px solid #ccc;
-    border-radius: 4px;
 }
 
-/* Ajuste específico para la columna de Cantidad y Precio/Subtotal */
-.detalle-venta-table .item-cantidad,
-.detalle-venta-table .item-precio,
-.detalle-venta-table .item-subtotal {
-    width: 100px; /* Ancho fijo para números */
-    text-align: right;
-    margin: 0 auto; /* Centrar en la celda si la celda es más ancha */
-    display: block;
+.form-group input:focus, .form-group select:focus {
+    outline: none; border-color: var(--azul-rey); background-color: var(--blanco);
 }
 
-/* Estilo para el botón de eliminar fila */
-.detalle-venta-table .btn-eliminar-item {
-    background-color: #dc3545;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: block; /* Asegura que no se aplique un ancho excesivo */
-    margin: 0 auto; /* Centrar el botón */
+.form-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem; }
+
+/* Buscadores */
+.actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+
+#buscar-empresa, #buscar-venta, #buscar-compra, #buscar-repuesto, #buscar-maquina {
+    padding: 0.7rem 1.2rem;
+    border: 1px solid #d1d5db;
+    border-radius: 50px;
+    min-width: 300px;
 }
 
-/* Estilo para el Total de la Venta en el pie de tabla */
-#total_venta {
-    background-color: #f8f9fa; /* Color de fondo claro para resaltar */
-    border: 2px solid #007bff; /* Borde para enfatizar */
-    font-size: 16px;
-    width: 100px !important; /* Mantenemos el ancho para que coincida con Subtotal */
-    text-align: right !important;
+/* =========================================
+   7. UTILIDADES
+   ========================================= */
+.alert { padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-weight: 500; }
+.alert.success { background-color: #dcfce7; color: #14532d; border: 1px solid #86efac; }
+.alert.error { background-color: #fee2e2; color: #7f1d1d; border: 1px solid #fca5a5; }
+
+/* Modal */
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 2000; }
+.modal-content { background: white; padding: 2rem; border-radius: var(--radio); width: 90%; max-width: 500px; animation: fadeIn 0.3s; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; }
+
+/* Footer */
+footer { background-color: var(--azul-rey); color: var(--blanco); text-align: center; padding: 1.5rem; margin-top: auto; }
+
+/* Responsivo */
+@media (max-width: 768px) {
+    nav { flex-direction: column; padding: 1rem; gap: 10px; }
+    nav > a, .dropbtn { width: 100%; text-align: center; justify-content: center; }
+    .dropdown-content { position: relative; width: 100%; box-shadow: none; left: 0; transform: none; text-align: center; }
+    .action-buttons { flex-direction: column; }
+    .actions { flex-direction: column; }
+    #buscar-empresa { width: 100%; }
 }
 
-.stock-bajo {
-    color: #a94442 !important; 
-    background-color: #f2dede; 
-    font-weight: bold; 
-    text-align: center;
-    
-    /* AÑADIDO: Animación de parpadeo que afecta el fondo y texto */
-    animation: blink-strong 2.8s infinite; /* Más rápido y repetitivo */
-}
-
-@keyframes blink-strong {
-    0%, 100% { background-color: #f2dede; color: #a94442; }
-    50% { background-color: #ffffff; color: #000000; }
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }

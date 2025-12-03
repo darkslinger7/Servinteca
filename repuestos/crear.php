@@ -12,39 +12,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $modelo = limpiar($_POST['modelo']);
     $descripcion = limpiar($_POST['descripcion']);
     
-    // 1. CAPTURAR CAMPOS
     $precio_venta = floatval($_POST['precio_venta'] ?? 0); 
-    $stock = intval($_POST['stock'] ?? 0); 
-
-    // VALIDACIÓN DE PRECIO Y STOCK
+    
     if ($precio_venta <= 0) {
         $error = "El precio de venta debe ser un valor positivo.";
-    } elseif ($stock < 0) {
-        $error = "El stock no puede ser negativo.";
     } else {
-        // 2. MODIFICAR LA CONSULTA INSERT para la tabla 'repuestos'
+        // STOCK INICIAL SIEMPRE ES 0
+        $stock_inicial = 0;
+
         $sql = "INSERT INTO repuestos (nombre, codigo, modelo, descripcion, precio_venta, stock) 
-                 VALUES (?, ?, ?, ?, ?, ?)";
+                VALUES (?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         
-        // Parámetros: ssss (strings) d (decimal/double) i (integer)
-        $stmt->bind_param("ssssdi", $nombre, $codigo, $modelo, $descripcion, $precio_venta, $stock);
+        $stmt->bind_param("ssssdi", $nombre, $codigo, $modelo, $descripcion, $precio_venta, $stock_inicial);
         
         if ($stmt->execute()) {
-            // MENSAJE DE ÉXITO: Cambiado a Repuesto
-            $mensajeExito = "Repuesto registrado exitosamente";
-            
-            // Redirección al index con mensaje de éxito de creación de repuesto
-            echo "<script>window.location.href = 'index.php?success=repuesto_creado';</script>";
-            exit(); 
+            $mensajeExito = "Repuesto registrado exitosamente (Stock inicial: 0)";
+            $_POST = array(); 
         } else {
-            // Error común: Duplicidad de código
             if ($conn->errno == 1062) { 
-                // MENSAJE DE ERROR: Cambiado a Repuesto
                 $error = "Error: El código de repuesto ya existe.";
             } else {
-                // MENSAJE DE ERROR: Cambiado a Repuesto
-                $error = "Error al registrar el repuesto: " . $conn->error;
+                $error = "Error al registrar: " . $conn->error;
             }
         }
     }
@@ -54,12 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <?php include '../includes/header.php'; ?>
 
 <section class="form-container">
-    <h2>Agregar nuevo repuesto</h2>
+    <h2>Registrar Nuevo Repuesto (Catálogo)</h2>
     
     <?php if($mensajeExito): ?>
         <div class="alert success">
             <?= $mensajeExito ?>
-            </div>
+            <script>setTimeout(() => { window.location.href = 'index.php'; }, 2000);</script>
+        </div>
     <?php endif; ?>
     
     <?php if($error): ?>
@@ -69,17 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <form method="POST">
         <div class="form-group">
             <label for="nombre">Nombre del Repuesto:</label>
-            <input type="text" id="nombre" name="nombre" value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>" required>
+            <input type="text" id="nombre" name="nombre" value="<?= htmlspecialchars($_POST['nombre'] ?? '') ?>" required placeholder="Ej. Filtro de tinta">
         </div>
         
         <div class="form-group">
             <label for="codigo">Código:</label>
-            <input type="text" id="codigo" name="codigo" value="<?= htmlspecialchars($_POST['codigo'] ?? '') ?>" required>
+            <input type="text" id="codigo" name="codigo" value="<?= htmlspecialchars($_POST['codigo'] ?? '') ?>" required placeholder="Ej. RP-FLT-001">
         </div>
 
         <div class="form-group">
-            <label for="modelo">Modelo:</label>
-            <input type="text" id="modelo" name="modelo" value="<?= htmlspecialchars($_POST['modelo'] ?? '') ?>" required>
+            <label for="modelo">Modelo / Compatibilidad:</label>
+            <input type="text" id="modelo" name="modelo" value="<?= htmlspecialchars($_POST['modelo'] ?? '') ?>" required placeholder="Ej. Serie UX">
         </div>
         
         <div class="form-group">
@@ -87,18 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <input type="number" id="precio_venta" name="precio_venta" step="0.01" min="0.01" value="<?= htmlspecialchars($_POST['precio_venta'] ?? '') ?>" required>
         </div>
         
-        <div class="form-group">
-            <label for="stock">Cantidad Disponible (Stock):</label>
-            <input type="number" id="stock" name="stock" min="0" value="<?= htmlspecialchars($_POST['stock'] ?? '0') ?>" required>
+        <div class="alert info" style="font-size: 0.9em; margin-bottom: 15px;">
+            <i class="fas fa-info-circle"></i> Nota: El stock inicial será 0. Para agregar unidades, ve al módulo de <strong>Compras</strong>.
         </div>
 
         <div class="form-group">
-            <label for="descripcion">Descripción del Repuesto:</label>
+            <label for="descripcion">Descripción:</label>
             <input type="text" id="descripcion" name="descripcion" value="<?= htmlspecialchars($_POST['descripcion'] ?? '') ?>" required>
         </div>
         
         <div class="form-actions">
-            <button type="submit" class="btn">Guardar</button>
+            <button type="submit" class="btn">Crear Ficha</button>
             <a href="index.php" class="btn secondary">Cancelar</a>
         </div>
     </form>
