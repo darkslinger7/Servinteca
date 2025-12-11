@@ -3,14 +3,12 @@ session_start();
 require_once '../includes/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-// Generar Token CSRF si no existe
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 $error = null; 
 
-// Si ya está logueado, enviar al inicio
 if (isset($_SESSION['user_id'])) {
     header("Location: /Servindteca/index.php");
     exit();
@@ -19,7 +17,7 @@ if (isset($_SESSION['user_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $error = "Error de seguridad (Token inválido)";
+        $error = "Token de seguridad inválido";
     } else {
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
@@ -27,8 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($username) || empty($password)) {
             $error = "Todos los campos son obligatorios";
         } else {
-            // Consulta segura (Incluimos 'rol' en la selección)
-            $sql = "SELECT id, password, nombre_completo, rol FROM usuarios WHERE username = ? LIMIT 1";
+            $sql = "SELECT id, password, nombre_completo FROM usuarios WHERE username = ? LIMIT 1";
             $stmt = $conn->prepare($sql);
             
             if ($stmt) {
@@ -40,34 +37,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $user = $result->fetch_assoc();
                     
                     if (password_verify($password, $user['password'])) {
-                        // --- INICIO DE SESIÓN EXITOSO ---
                         session_regenerate_id(true);
                         $_SESSION['user_id'] = $user['id'];
                         $_SESSION['username'] = $username;
                         $_SESSION['nombre_completo'] = $user['nombre_completo'];
-                        
-                        // ¡¡ESTA ES LA LÍNEA QUE FALTABA!!
-                        $_SESSION['rol'] = $user['rol']; 
-                        // --------------------------------
-                        
                         $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); 
                         
                         header("Location: /Servindteca/index.php");
                         exit();
                     } else {
-                        $error = "Contraseña incorrecta";
+                        $error = "Credenciales incorrectas";
                     }
                 } else {
                     $error = "Usuario no encontrado";
                 }
                 $stmt->close();
             } else {
-                $error = "Error de conexión";
+                $error = "Error en la base de datos";
             }
         }
     }
 }
-?>
+$conn->close();
+?> 
 
 <!DOCTYPE html>
 <html lang="es">
@@ -76,54 +68,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Servindteca</title>
     <link rel="stylesheet" href="/Servindteca/css/styles.css">
-    <link rel="icon" href="/Servindteca/img/logo.png">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" href="/Servindteca/img/Logo.png">
 </head>
-
-<body class="login-page-body">
-
-<div class="login-container shine-effect">
-    
+<body>
+<div class="login-container">
     <img src="/Servindteca/img/logo.png" alt="Logo Servindteca" class="login-logo">
-    
     <div class="company-header">
         <h2>SERVICIOS INDUSTRIALES</h2>
         <h3>TECNOLOGY C.A.</h3>
-        <span class="rif">RIF: J-405570360</span>
+        <p class="rif">RIF.J-405570360</p>
     </div>
     
-    <hr style="border: 0; border-top: 1px solid #eee; margin: 1.5rem 0;">
-    
-    <h1 class="login-title">Acceso al Sistema</h1>
+    <h1 class="login-title">Iniciar Sesión</h1>
     
     <?php if($error !== null): ?>
-        <div class="alert error" style="text-align: left; font-size: 0.9rem;">
-            <i class="fas fa-exclamation-circle"></i> <?= htmlspecialchars($error) ?>
-        </div>
+        <div class="alert error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
     
     <form class="login-form" action="" method="POST">
         <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
         
         <div class="form-group">
-            <label for="username"><i class="fas fa-user" style="color:#aaa; margin-right:5px;"></i> Usuario</label>
-            <input type="text" id="username" name="username" placeholder="Ingrese su usuario" required autofocus>
+            <label for="username">Usuario</label>
+            <input type="text" id="username" name="username" required autofocus>
         </div>
         
         <div class="form-group">
-            <label for="password"><i class="fas fa-lock" style="color:#aaa; margin-right:5px;"></i> Contraseña</label>
-            <input type="password" id="password" name="password" placeholder="••••••••" required>
+            <label for="password">Contraseña</label>
+            <input type="password" id="password" name="password" required>
         </div>
         
-        <button type="submit" class="login-button">
-            Ingresar <i class="fas fa-arrow-right" style="margin-left: 5px;"></i>
-        </button>
+        <button type="submit" class="login-button">Ingresar</button>
     </form>
-    
-    <div class="login-footer" style="margin-top: 2rem; font-size: 0.8rem; color: #888;">
-        &copy; <?= date('Y') ?> Servindteca. Todos los derechos reservados.
-    </div>
-
-</div>
+  </div>
 </body>
-</html>
+</html> -->

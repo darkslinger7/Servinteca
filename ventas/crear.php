@@ -1,104 +1,143 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id'])) { header("Location: /Servindteca/auth/login.php"); exit(); }
+if (!isset($_SESSION['user_id'])) {
+    header("Location: /Servindteca/auth/login.php");
+    exit();
+}
 require_once '../includes/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-// Obtener clientes
-$clientes = $conn->query("SELECT id, nombre, rif FROM empresas ORDER BY nombre");
+// CONSULTA UNIFICADA (Mucho más simple ahora)
+// Traemos productos con stock positivo O servicios (que no usan stock)
+$productos_sql = "SELECT codigo, nombre, precio_venta, stock, tipo 
+                  FROM productos 
+                  WHERE stock > 0 OR tipo = 'servicio' 
+                  ORDER BY nombre";
+$productos_result = $conn->query($productos_sql);
 
-// Obtener productos para el JS (Catálogo con Stock)
-// Usamos UNION para traer maquinas y repuestos juntos
-$sql_prod = "SELECT codigo, nombre, precio_venta, stock, 'maquina' as tipo FROM maquinas WHERE stock > 0
-             UNION ALL
-             SELECT codigo, nombre, precio_venta, stock, 'repuesto' as tipo FROM repuestos WHERE stock > 0
-             ORDER BY nombre";
-$productos = $conn->query($sql_prod);
-$lista_productos = [];
-while($p = $productos->fetch_assoc()) {
-    $lista_productos[] = $p;
+$clientes_result = $conn->query("SELECT id, nombre, rif FROM empresas ORDER BY nombre");
+
+// Array auxiliar para JS
+$productos_data = [];
+if ($productos_result->num_rows > 0) {
+    while ($p = $productos_result->fetch_assoc()) {
+        $productos_data[$p['codigo']] = $p;
+    }
 }
+$productos_result->data_seek(0); 
 
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $cliente_id = intval($_POST['cliente_id']);
-    $fecha = $_POST['fecha_venta'];
-    $num_comprobante = limpiar($_POST['num_comprobante'] ?? '');
+    $cliente_id = limpiar($_POST['cliente_id'] ?? ''); 
     $descripcion = limpiar($_POST['descripcion'] ?? '');
-    $items = $_POST['items'] ?? [];
+    $fecha = limpiar($_POST['fecha'] ?? '');
+    $num_comprobante = limpiar($_POST['num_comprobante'] ?? '');
+    $items = $_POST['items'] ?? []; 
     
-    $total_venta = 0;
-
-    if (empty($items)) {
-        $error = "Debe agregar al menos un producto.";
-    } elseif ($cliente_id <= 0) {
-        $error = "Seleccione un cliente.";
-    } else {
-        try {
-            $conn->begin_transaction();
-
-            // 1. Calcular Total y Validar Stock en el Servidor (Seguridad)
-            foreach ($items as $item) {
-                $codigo = $item['codigo'];
-                $cantidad = intval($item['cantidad']);
-                
-                // Buscar stock actual en BD para evitar trampas del JS
-                // Buscamos primero en maquinas, si no en repuestos
-                $stmt_check = $conn->prepare("SELECT stock, precio_venta, 'maquina' as tipo FROM maquinas WHERE codigo = ? UNION SELECT stock, precio_venta, 'repuesto' as tipo FROM repuestos WHERE codigo = ?");
-                $stmt_check->bind_param("ss", $codigo, $codigo);
-                $stmt_check->execute();
-                $res_check = $stmt_check->get_result()->fetch_assoc();
-                $stmt_check->close();
-
-                if (!$res_check) throw new Exception("Producto $codigo no existe.");
-                if ($res_check['stock'] < $cantidad) throw new Exception("Stock insuficiente para $codigo. Disponible: " . $res_check['stock']);
-
-                // Usamos el precio del formulario (puede haber descuento manual) o el de la BD
-                $precio = floatval($item['precio']);
-                $total_venta += ($precio * $cantidad);
-            }
-
-            // 2. Insertar Venta
-            $stmt_v = $conn->prepare("INSERT INTO ventas (empresas_id, usuario_id, fecha_venta, num_comprobante, total, descripcion) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt_v->bind_param("iissss", $cliente_id, $_SESSION['user_id'], $fecha, $num_comprobante, $total_venta, $descripcion);
-            $stmt_v->execute();
-            $venta_id = $conn->insert_id;
-            $stmt_v->close();
-
-            // 3. Insertar Detalles y Descontar Stock
-            $stmt_d = $conn->prepare("INSERT INTO detalle_venta (venta_id, codigo_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)");
+    // --- 1. VALIDACIÓN DE FECHA FUTURA ---
+    $fecha_actual = date('Y-m-d');
+    if ($fecha > $fecha_actual) {
+        $error = "Error: No puede registrar ventas con fecha futura (La fecha máxima es hoy: $fecha_actual).";
+    }
+    
+    // --- 2. VALIDACIONES DE LOGICA ---
+    $total_venta = 0.00;
+    $errores_items = [];
+    
+    if (empty($error)) { // Solo validamos items si la fecha está bien
+        foreach ($items as $index => $item) {
+            $codigo = limpiar($item['codigo'] ?? '');
+            $cantidad = (int)($item['cantidad'] ?? 0);
+            $precio = (float)($item['precio_unitario'] ?? 0.00);
             
+            // Verificar existencia en BD
+            if (empty($codigo)) continue; // Saltar vacíos
+            
+            // Consultamos la BD fresca para ver el stock REAL (Evitar trucos de HTML)
+            $stmt_check = $conn->prepare("SELECT stock, nombre, tipo FROM productos WHERE codigo = ?");
+            $stmt_check->bind_param("s", $codigo);
+            $stmt_check->execute();
+            $res_check = $stmt_check->get_result()->fetch_assoc();
+            $stmt_check->close();
+
+            if (!$res_check) {
+                $errores_items[] = "El producto código '$codigo' no existe.";
+                continue;
+            }
+
+            // --- 3. VALIDACIÓN DE STOCK (Solo para bienes físicos) ---
+            if ($res_check['tipo'] !== 'servicio') {
+                if ($res_check['stock'] < $cantidad) {
+                    $errores_items[] = "Stock insuficiente para '{$res_check['nombre']}'. Solicitado: $cantidad | Disponible: {$res_check['stock']}.";
+                }
+            }
+
+            // Validar valores
+            if ($cantidad <= 0) $errores_items[] = "La cantidad para '{$res_check['nombre']}' debe ser mayor a 0.";
+            if ($precio < 0) $errores_items[] = "El precio no puede ser negativo.";
+            
+            $items[$index]['tipo'] = $res_check['tipo']; // Guardamos el tipo seguro desde BD
+            $total_venta += ($cantidad * $precio);
+        }
+    }
+
+    if (!empty($errores_items)) {
+        $error = "<b>No se pudo procesar la venta:</b><br>" . implode("<br>", $errores_items);
+    } elseif (empty($error) && $total_venta <= 0) {
+        $error = "El total de la venta debe ser mayor a cero.";
+    } elseif (empty($error)) {
+        
+        // --- PROCESAR VENTA ---
+        $conn->begin_transaction(); 
+        try {
+            // A. Insertar Cabecera
+            $sql = "INSERT INTO ventas (empresas_id, total, descripcion, fecha_venta, num_comprobante, usuario_id) 
+                    VALUES (?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("idsssi", $cliente_id, $total_venta, $descripcion, $fecha, $num_comprobante, $_SESSION['user_id']); 
+            $stmt->execute();
+            $venta_id = $conn->insert_id;
+            $stmt->close();
+          
+            // B. Insertar Detalles y Descontar Stock
+            $sql_detalle = "INSERT INTO detalle_venta (venta_id, cantidad, precio_unitario, codigo_producto) 
+                            VALUES (?, ?, ?, ?)";
+            $stmt_detalle = $conn->prepare($sql_detalle);
+            
+            // Preparar actualización de stock
+            $sql_stock = "UPDATE productos SET stock = stock - ? WHERE codigo = ?";
+            $stmt_stock = $conn->prepare($sql_stock);
+
             foreach ($items as $item) {
                 $codigo = $item['codigo'];
-                $cantidad = intval($item['cantidad']);
-                $precio = floatval($item['precio']);
+                $cantidad = $item['cantidad'];
+                $precio = $item['precio_unitario'];
+                $tipo = $item['tipo']; 
                 
-                // Insertar detalle
-                $stmt_d->bind_param("isid", $venta_id, $codigo, $cantidad, $precio);
-                $stmt_d->execute();
-
-                // Descontar Stock (Detectando tabla correcta)
-                // Nota: Ya sabemos que existe por la validación anterior
-                $tipo = $item['tipo']; // Enviado desde el form hidden
-                $tabla = ($tipo == 'maquina') ? 'maquinas' : 'repuestos';
+                // Guardar detalle
+                $stmt_detalle->bind_param("iids", $venta_id, $cantidad, $precio, $codigo);
+                $stmt_detalle->execute();
                 
-                $sql_stock = "UPDATE $tabla SET stock = stock - ? WHERE codigo = ?";
-                $stmt_st = $conn->prepare($sql_stock);
-                $stmt_st->bind_param("is", $cantidad, $codigo);
-                $stmt_st->execute();
-                $stmt_st->close();
+                // Descontar Stock (Si no es servicio)
+                if ($tipo !== 'servicio') {
+                    $stmt_stock->bind_param("is", $cantidad, $codigo); 
+                    $stmt_stock->execute();
+                }
             }
-            $stmt_d->close();
-
+            
+            $stmt_detalle->close();
+            $stmt_stock->close();
+            
             $conn->commit();
-            $_SESSION['mensaje_exito'] = "Venta registrada exitosamente. Factura #$venta_id";
-            header("Location: index.php");
+            
+            $_SESSION['mensaje_exito'] = "Venta registrada correctamente. Factura #$venta_id";
+            header("Location: index.php?success=1");
             exit();
-
+            
         } catch (Exception $e) {
             $conn->rollback();
-            $error = "Error: " . $e->getMessage();
+            $error = "Error crítico: " . $e->getMessage();
         }
     }
 }
@@ -107,125 +146,176 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <?php include '../includes/header.php'; ?>
 
 <div class="form-container" style="max-width: 1000px;">
-    <h2>Nueva Venta</h2>
-    <?php if($error): ?><div class="alert error"><?= $error ?></div><?php endif; ?>
-
-    <form method="POST" id="form-venta">
-        <div style="background:#f9f9f9; padding:15px; border-radius:5px; margin-bottom:20px; display:flex; gap:15px; flex-wrap:wrap;">
-            <div style="flex:2;">
-                <label>Cliente:</label>
-                <select name="cliente_id" required style="width:100%;">
-                    <option value="">Seleccione Cliente...</option>
-                    <?php while($c = $clientes->fetch_assoc()): ?>
-                        <option value="<?= $c['id'] ?>"><?= $c['nombre'] ?> (<?= $c['rif'] ?>)</option>
+    <h2>Registrar Nueva Venta</h2>
+    
+    <?php if(!empty($error)): ?>
+        <div class="alert error"><?= $error ?></div>
+    <?php endif; ?>
+    
+    <form method="POST">
+        <div style="background:#f9fafb; padding:20px; border-radius:8px; border:1px solid #e5e7eb; margin-bottom:20px; display:flex; gap:20px; flex-wrap:wrap;">
+            <div style="flex:2; min-width:250px;">
+                <label for="cliente_id">Cliente:</label>
+                <select id="cliente_id" name="cliente_id" required>
+                    <option value="">Seleccione...</option>
+                    <?php 
+                    $clientes_result->data_seek(0); 
+                    while($c = $clientes_result->fetch_assoc()): 
+                    ?>
+                    <option value="<?= $c['id'] ?>" <?= (($_POST['cliente_id'] ?? '') == $c['id']) ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['nombre']) ?> (<?= $c['rif'] ?>)
+                    </option>
                     <?php endwhile; ?>
                 </select>
             </div>
-            <div style="flex:1;">
-                <label>Fecha:</label>
-                <input type="date" name="fecha_venta" value="<?= date('Y-m-d') ?>" required>
+            
+            <div style="flex:1; min-width:150px;">
+                <label for="fecha">Fecha Emisión:</label>
+                <input type="date" id="fecha" name="fecha" value="<?= htmlspecialchars($_POST['fecha'] ?? date('Y-m-d')) ?>" max="<?= date('Y-m-d') ?>" required>
             </div>
-            <div style="flex:1;">
-                <label>N° Control / Factura:</label>
-                <input type="text" name="num_comprobante" placeholder="Opcional">
+
+            <div style="flex:1; min-width:150px;">
+                <label for="num_comprobante">N° Control (Opcional):</label>
+                <input type="text" id="num_comprobante" name="num_comprobante" value="<?= htmlspecialchars($_POST['num_comprobante'] ?? '') ?>">
             </div>
         </div>
 
-        <table class="table" id="tabla-productos">
-            <thead>
-                <tr style="background:#eee;">
-                    <th width="40%">Producto</th>
-                    <th width="15%">Stock</th>
-                    <th width="15%">Cantidad</th>
-                    <th width="15%">Precio Unit.</th>
-                    <th width="15%">Subtotal</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody id="lista-items">
-                </tbody>
-        </table>
+        <h3 style="color:var(--azul-rey); border-bottom:2px solid var(--azul-claro); padding-bottom:5px; margin-bottom:15px;">Productos</h3>
+        
+        <div id="detalle-productos-container"></div>
+        
+        <div style="text-align:right; margin-top:20px; font-size:1.2em; border-top:1px solid #ddd; padding-top:10px;">
+            <label style="font-weight:bold; margin-right:10px;">TOTAL A PAGAR:</label>
+            <span style="color:var(--success); font-weight:800; font-size:1.4em;">$</span>
+            <input type="text" id="total_venta" readonly value="0.00" style="border:none; background:transparent; font-weight:800; font-size:1.4em; color:var(--success); width:120px; text-align:left;">
+        </div>
 
-        <button type="button" class="btn secondary" onclick="agregarItem()" style="margin-top:10px;">
-            <i class="fas fa-plus"></i> Agregar Producto
+        <button type="button" id="agregar-producto" class="btn secondary" style="margin-top:-40px;">
+            <i class="fas fa-plus"></i> Agregar Item
         </button>
 
-        <div style="text-align:right; margin-top:20px; font-size:1.2em;">
-            <strong>Total a Pagar: $<span id="total-display">0.00</span></strong>
+        <div class="form-group" style="margin-top: 20px;">
+            <label for="descripcion">Notas / Observaciones:</label>
+            <textarea id="descripcion" name="descripcion" rows="3" placeholder="Detalles adicionales de la venta..."><?= htmlspecialchars($_POST['descripcion'] ?? '') ?></textarea>
         </div>
-
-        <div class="form-group" style="margin-top:15px;">
-            <label>Observaciones:</label>
-            <textarea name="descripcion" rows="2"></textarea>
-        </div>
-
+        
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Finalizar Venta</button>
+            <button type="submit" class="btn btn-primary">Procesar Venta</button>
             <a href="index.php" class="btn secondary">Cancelar</a>
         </div>
     </form>
 </div>
 
 <script>
-const productos = <?= json_encode($lista_productos) ?>;
-
-function agregarItem() {
-    const index = document.querySelectorAll('#lista-items tr').length;
-    const tr = document.createElement('tr');
-    
-    let options = '<option value="">-- Seleccionar --</option>';
-    productos.forEach(p => {
-        options += `<option value="${p.codigo}" data-precio="${p.precio_venta}" data-stock="${p.stock}" data-tipo="${p.tipo}">${p.nombre} (Stock: ${p.stock})</option>`;
-    });
-
-    tr.innerHTML = `
-        <td>
-            <select name="items[${index}][codigo]" class="form-control select-prod" required onchange="actualizarFila(this)">
-                ${options}
-            </select>
-            <input type="hidden" name="items[${index}][tipo]" class="input-tipo">
-        </td>
-        <td><input type="text" class="input-stock" disabled style="width:60px; background:#eee;"></td>
-        <td><input type="number" name="items[${index}][cantidad]" class="form-control input-cant" min="1" value="1" required onchange="calcularTotal()"></td>
-        <td><input type="number" name="items[${index}][precio]" class="form-control input-precio" step="0.01" required onchange="calcularTotal()"></td>
-        <td class="td-subtotal">$0.00</td>
-        <td><button type="button" class="btn-danger btn-sm" onclick="eliminarFila(this)">X</button></td>
+    // Generamos las opciones una sola vez
+    const opcionesHTML = `
+        <option value="">-- Seleccionar --</option>
+        <?php foreach($productos_data as $p): ?>
+        <option value="<?= $p['codigo'] ?>" 
+                data-precio="<?= $p['precio_venta'] ?>" 
+                data-stock="<?= $p['stock'] ?>"
+                data-tipo="<?= $p['tipo'] ?>">
+            <?= htmlspecialchars($p['nombre']) ?> (Stock: <?= $p['stock'] ?>)
+        </option>
+        <?php endforeach; ?>
     `;
-    document.getElementById('lista-items').appendChild(tr);
-}
 
-function actualizarFila(select) {
-    const tr = select.closest('tr');
-    const option = select.options[select.selectedIndex];
-    
-    if (option.value) {
-        tr.querySelector('.input-precio').value = option.dataset.precio;
-        tr.querySelector('.input-stock').value = option.dataset.stock;
-        tr.querySelector('.input-tipo').value = option.dataset.tipo;
-        tr.querySelector('.input-cant').max = option.dataset.stock; // Validar maximo en HTML
+    let itemCount = 0;
+
+    function agregarFila() {
+        const container = document.getElementById('detalle-productos-container');
+        const row = document.createElement('div');
+        row.className = 'product-row';
+        row.style.cssText = 'display:flex; gap:10px; align-items:flex-end; background:#fff; padding:10px; border:1px solid #eee; margin-bottom:10px; border-radius:6px;';
+        
+        row.innerHTML = `
+            <div style="flex:3;">
+                <label style="font-size:0.85em; font-weight:bold;">Producto / Servicio</label>
+                <select name="items[${itemCount}][codigo]" class="item-select" required onchange="actualizarDatos(this)" style="width:100%;">
+                    ${opcionesHTML}
+                </select>
+            </div>
+            
+            <div style="flex:1;">
+                <label style="font-size:0.85em; font-weight:bold;">Stock</label>
+                <input type="text" class="item-stock" disabled style="background:#f3f4f6; color:#666; width:100%;">
+            </div>
+
+            <div style="flex:1;">
+                <label style="font-size:0.85em; font-weight:bold;">Cant.</label>
+                <input type="number" name="items[${itemCount}][cantidad]" class="item-cant" min="1" value="1" required onchange="calcularTotal()" style="width:100%;">
+            </div>
+
+            <div style="flex:1;">
+                <label style="font-size:0.85em; font-weight:bold;">Precio $</label>
+                <input type="number" name="items[${itemCount}][precio_unitario]" class="item-precio" step="0.01" required onchange="calcularTotal()" style="width:100%;">
+            </div>
+
+            <div style="flex:1; text-align:right;">
+                <label style="font-size:0.85em; font-weight:bold;">Subtotal</label>
+                <div class="item-subtotal" style="padding:10px 0; font-weight:bold;">0.00</div>
+            </div>
+
+            <div>
+                <button type="button" class="btn-danger" onclick="this.parentElement.parentElement.remove(); calcularTotal();" style="padding:8px 12px; margin-bottom:2px;">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(row);
+        itemCount++;
     }
-    calcularTotal();
-}
 
-function calcularTotal() {
-    let total = 0;
-    document.querySelectorAll('#lista-items tr').forEach(tr => {
-        const cant = parseFloat(tr.querySelector('.input-cant').value) || 0;
-        const precio = parseFloat(tr.querySelector('.input-precio').value) || 0;
-        const sub = cant * precio;
-        tr.querySelector('.td-subtotal').textContent = '$' + sub.toFixed(2);
-        total += sub;
-    });
-    document.getElementById('total-display').textContent = total.toFixed(2);
-}
+    function actualizarDatos(select) {
+        const row = select.closest('.product-row');
+        const option = select.options[select.selectedIndex];
+        
+        if (option.value) {
+            const precio = option.dataset.precio;
+            const stock = option.dataset.stock;
+            const tipo = option.dataset.tipo;
 
-function eliminarFila(btn) {
-    btn.closest('tr').remove();
-    calcularTotal();
-}
+            row.querySelector('.item-precio').value = precio;
+            
+            // Manejo visual del stock
+            const stockInput = row.querySelector('.item-stock');
+            if (tipo === 'servicio') {
+                stockInput.value = '∞'; // Infinito para servicios
+                row.querySelector('.item-cant').removeAttribute('max');
+            } else {
+                stockInput.value = stock;
+                // Opcional: Poner límite máximo en el input HTML (UX extra)
+                row.querySelector('.item-cant').max = stock;
+            }
+        }
+        calcularTotal();
+    }
 
-// Agregar una fila al inicio
-document.addEventListener('DOMContentLoaded', agregarItem);
+    function calcularTotal() {
+        let total = 0;
+        document.querySelectorAll('.product-row').forEach(row => {
+            const cant = parseFloat(row.querySelector('.item-cant').value) || 0;
+            const precio = parseFloat(row.querySelector('.item-precio').value) || 0;
+            const sub = cant * precio;
+            
+            row.querySelector('.item-subtotal').textContent = sub.toFixed(2);
+            total += sub;
+        });
+        document.getElementById('total_venta').value = total.toFixed(2);
+    }
+
+   
+    document.getElementById('agregar-producto').addEventListener('click', agregarFila);
+    
+    
+    <?php if(empty($_POST['items'])): ?>
+        agregarFila(); 
+    <?php endif; ?>
+
+    
+    document.getElementById('fecha').max = new Date().toISOString().split("T")[0];
+
 </script>
 
 <?php include '../includes/footer.php'; ?>

@@ -337,11 +337,20 @@ td.actions {
 /* Buscadores */
 .actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
 
-#buscar-empresa, #buscar-venta, #buscar-compra, #buscar-repuesto, #buscar-maquina {
+/* Reemplaza el bloque de selectores de búsqueda con este: */
+#buscar-empresa, 
+#buscar-venta, 
+#buscar-compra, 
+#buscar-producto,  /* <-- Agregado */
+#buscar-servicio,  /* <-- Agregado */
+#buscar {
     padding: 0.7rem 1.2rem;
     border: 1px solid #d1d5db;
     border-radius: 50px;
     min-width: 300px;
+    font-size: 0.95rem;
+    background-color: #fff;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
 }
 
 /* =========================================
@@ -370,3 +379,184 @@ footer { background-color: var(--azul-rey); color: var(--blanco); text-align: ce
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* =========================================
+   8. ESTILOS ESPECÍFICOS PARA LOGIN (FIX)
+   ========================================= */
+/* Esto asegura que el login flote en el centro de la pantalla */
+.login-page-body {
+    display: flex;
+    align-items: center;     
+    justify-content: center; 
+    min-height: 100vh;       
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); 
+}
+
+.login-container {
+    background-color: var(--blanco);
+    width: 100%;
+    max-width: 420px;
+    padding: 2.5rem;
+    border-radius: 12px; /* Más redondeado */
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* Sombra profunda */
+    text-align: center;
+    border-top: 6px solid var(--azul-rey);
+    margin: 2rem; /* Margen de seguridad para móviles */
+}
+
+/* Logo */
+.login-logo {
+    height: 90px;
+    width: auto;
+    margin-bottom: 1rem;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Encabezados */
+.company-header {
+    margin-bottom: 2rem;
+}
+
+.company-header h2 {
+    color: var(--azul-rey);
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin: 0;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+}
+
+.company-header h3 {
+    color: var(--naranja);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 5px 0;
+}
+
+.rif {
+    display: inline-block;
+    background-color: #f1f5f9;
+    color: #64748b;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+/* Título "Iniciar Sesión" */
+.login-title {
+    color: var(--texto);
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    position: relative;
+    padding-bottom: 10px;
+}
+
+.login-title::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 50px;
+    height: 3px;
+    background-color: var(--azul-claro);
+    border-radius: 2px;
+}
+
+/* Formulario */
+.login-form {
+    text-align: left; /* Inputs alineados a la izquierda para mejor lectura */
+}
+
+.login-container .form-group {
+    margin-bottom: 1.2rem;
+}
+
+.login-container label {
+    display: block;
+    color: var(--azul-rey);
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+    padding-left: 2px;
+}
+
+/* Inputs mejorados */
+.login-container input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background-color: #f8fafc;
+}
+
+.login-container input:focus {
+    border-color: var(--azul-rey);
+    background-color: #fff;
+    box-shadow: 0 0 0 4px rgba(0, 35, 102, 0.1);
+}
+
+/* Botón */
+.login-button {
+    width: 100%;
+    padding: 1rem;
+    background: linear-gradient(to right, var(--azul-rey), var(--azul-oscuro));
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin-top: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.login-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 35, 102, 0.2);
+}
+
+.login-button:active {
+    transform: translateY(0);
+}
+
+/* Footer del login */
+.login-footer {
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 1.5rem;
+}
+
+/* Estilos Notificaciones */
+.notification-bell {
+    margin-right: 15px;
+    margin-left: 10px;
+}
+.notification-bell .badge {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    background-color: #e74c3c;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 5px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    border: 1px solid white;
+}
+.notification-bell .dropdown-content {
+    max-height: 400px;
+    overflow-y: auto;
+}

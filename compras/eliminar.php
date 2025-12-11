@@ -1,68 +1,63 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id'])) {
-    header("Location: /Servindteca/login.php");
-    exit();
-}
 require_once '../includes/database.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id'])) {
-    
-    $id_compra = (int)$_POST['id'];
+header("Content-Type: application/json");
 
-    try {
-        $conn->begin_transaction();
+// 1. Validar seguridad (Solo POST y Usuario Logueado)
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Acceso no autorizado.']);
+    exit;
+}
 
-      
-        $sql_select = "SELECT codigo_producto, cantidad FROM compra WHERE id_compra = ?";
-        $stmt_select = $conn->prepare($sql_select);
-        $stmt_select->bind_param("i", $id_compra);
-        $stmt_select->execute();
-        $stmt_select->bind_result($codigo_producto, $cantidad_comprada);
-        $stmt_select->fetch();
-        $stmt_select->close();
+// 2. Obtener el ID
+$input = json_decode(file_get_contents('php://input'), true);
+$id_compra = (int)($input['id'] ?? 0);
 
-        if (empty($codigo_producto)) {
-            throw new Exception("Error: El registro de compra no existe.");
-        }
+if ($id_compra <= 0) {
+    echo json_encode(['success' => false, 'error' => 'ID inválido.']);
+    exit;
+}
 
-        
-        $sql_get_type = "SELECT tipo_producto FROM producto WHERE codigo_unificado = ?";
-        $stmt_get_type = $conn->prepare($sql_get_type);
-        $stmt_get_type->bind_param("s", $codigo_producto);
-        $stmt_get_type->execute();
-        $stmt_get_type->bind_result($tipo_producto);
-        $stmt_get_type->fetch();
-        $stmt_get_type->close();
+try {
+    $conn->begin_transaction();
 
-        $tabla = ($tipo_producto === 'maquina') ? 'maquinas' : 'repuestos';
-        
-        $sql_revert_stock = "UPDATE {$tabla} SET stock = stock - ? WHERE codigo = ?";
-        $stmt_update = $conn->prepare($sql_revert_stock);
-        $stmt_update->bind_param("is", $cantidad_comprada, $codigo_producto);
+    // 3. RECUPERAR ITEMS PARA RESTAR EL STOCK (Revertir la compra)
+    // Buscamos en la nueva tabla 'detalle_compra'
+    $sql_items = "SELECT codigo_producto, cantidad FROM detalle_compra WHERE compra_id = ?";
+    $stmt_items = $conn->prepare($sql_items);
+    $stmt_items->bind_param("i", $id_compra);
+    $stmt_items->execute();
+    $res_items = $stmt_items->get_result();
+
+    // Preparamos la consulta de actualización de stock (Restar)
+    $sql_update = "UPDATE productos SET stock = stock - ? WHERE codigo = ?";
+    $stmt_update = $conn->prepare($sql_update);
+
+    while($item = $res_items->fetch_assoc()) {
+        $stmt_update->bind_param("is", $item['cantidad'], $item['codigo_producto']);
         $stmt_update->execute();
-        $stmt_update->close();
-
-      
-        $sql_delete = "DELETE FROM compra WHERE id_compra = ?";
-        $stmt_delete = $conn->prepare($sql_delete);
-        $stmt_delete->bind_param("i", $id_compra);
-        $stmt_delete->execute();
-        $stmt_delete->close();
-        
-        $conn->commit();
-        $_SESSION['mensaje_exito'] = "Compra eliminada y stock revertido correctamente.";
-
-    } catch (Exception $e) {
-        $conn->rollback();
-        $_SESSION['mensaje_exito'] = "Error al eliminar la compra: " . $e->getMessage();
     }
+    
+    $stmt_items->close();
+    $stmt_update->close();
 
-    header("Location: index.php");
-    exit();
-} else {
-    $_SESSION['mensaje_exito'] = "Acceso no autorizado o ID de compra no especificado.";
-    header("Location: index.php");
-    exit();
+    // 4. ELIMINAR LA COMPRA (Cabecera)
+    // Gracias a ON DELETE CASCADE en la base de datos, los detalles se borran solos.
+    $stmt_del = $conn->prepare("DELETE FROM compras WHERE id = ?");
+    $stmt_del->bind_param("i", $id_compra);
+    
+    if ($stmt_del->execute()) {
+        $conn->commit();
+        echo json_encode(['success' => true]);
+    } else {
+        throw new Exception("No se pudo eliminar el registro principal.");
+    }
+    $stmt_del->close();
+
+} catch (Exception $e) {
+    $conn->rollback();
+    echo json_encode(['success' => false, 'error' => 'Error: ' . $e->getMessage()]);
 }
 ?>

@@ -8,7 +8,6 @@ $errores = [];
 $compra = null;
 $proveedores = $conn->query("SELECT id, nombre FROM proveedores ORDER BY nombre");
 
-// Cargar datos
 if ($id_compra > 0) {
     $stmt = $conn->prepare("SELECT * FROM compra WHERE id_compra = ?");
     $stmt->bind_param("i", $id_compra);
@@ -19,7 +18,6 @@ if ($id_compra > 0) {
     $errores[] = "ID inválido.";
 }
 
-// Procesar Actualización
 if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($errores)) {
     $nuevo_proveedor = (int)$_POST['id_proveedor'];
     $nueva_factura = $_POST['num_factura'];
@@ -33,13 +31,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($errores)) {
         try {
             $conn->begin_transaction();
             
-            // 1. Ajustar Stock (Diferencia: Nueva - Vieja)
-            // Si antes eran 10 y ahora son 12, sumamos 2 al stock.
-            // Si antes eran 10 y ahora son 8, restamos 2 al stock.
             $diferencia = $nueva_cantidad - $compra['cantidad'];
             
             if ($diferencia != 0) {
-                // Buscar tipo producto
                 $stmt_tipo = $conn->prepare("SELECT tipo_producto FROM producto WHERE codigo_unificado = ?");
                 $stmt_tipo->bind_param("s", $compra['codigo_producto']);
                 $stmt_tipo->execute();
@@ -53,7 +47,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && empty($errores)) {
                 $stmt_st->execute();
             }
             
-            // 2. Actualizar Compra
             $sql = "UPDATE compra SET id_proveedor=?, num_factura=?, fecha_compra=?, cantidad=?, precio_compra_unitario=? WHERE id_compra=?";
             $stmt = $conn->prepare($sql);
             $stmt->bind_param("issidi", $nuevo_proveedor, $nueva_factura, $nueva_fecha, $nueva_cantidad, $nuevo_precio, $id_compra);

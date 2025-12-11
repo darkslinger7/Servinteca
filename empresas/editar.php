@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../includes/database.php';
+// Asegúrate de que la ruta sea correcta
 if (file_exists(__DIR__ . '/../includes/functions.php')) {
     require_once __DIR__ . '/../includes/functions.php';
 } else {
@@ -13,7 +14,7 @@ $error = '';
 
 if ($id <= 0) { header("Location: index.php"); exit(); }
 
-// Obtener datos actuales
+// Cargar datos actuales
 $stmt = $conn->prepare("SELECT * FROM empresas WHERE id = ?");
 $stmt->bind_param("i", $id);
 $stmt->execute();
@@ -21,15 +22,13 @@ $empresa = $stmt->get_result()->fetch_assoc();
 
 if (!$empresa) { header("Location: index.php?error=no_existe"); exit(); }
 
-// --- LÓGICA PARA SEPARAR DATOS EXISTENTES ---
-// 1. Separar RIF (Asumiendo formato Letra-Numero o solo LetraNumero)
-$rif_actual_letra = strtoupper(substr($empresa['rif'], 0, 1)); // Primera letra
-// Extraemos solo los números del resto de la cadena
+// --- LOGICA VISUAL ---
+// Separar RIF (Letra y Número)
+$rif_actual_letra = strtoupper(substr($empresa['rif'], 0, 1));
 $rif_actual_numero = preg_replace('/[^0-9]/', '', substr($empresa['rif'], 1));
 
-// 2. Separar Teléfono (Quitar el +58 si existe para mostrarlo limpio)
+// Separar Teléfono (Quitar +58)
 $telefono_limpio = str_replace('+58', '', $empresa['telefono'] ?? '');
-// --------------------------------------------
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $nombre = limpiar($_POST['nombre']);
@@ -44,29 +43,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!empty($telefono_input) && !is_numeric($telefono_input)) {
          $error = "El teléfono solo debe contener números.";
     }
-    // Solo agregamos +58 si el usuario escribió algo y no lo escribió él mismo
-    if (!empty($telefono_input)) {
-        // Chequeo simple por si el usuario borró todo
-        $telefono = "+58" . $telefono_input;
-    } else {
-        $telefono = '';
-    }
+    $telefono = !empty($telefono_input) ? "+58" . $telefono_input : '';
 
     $email = limpiar($_POST['email']);
-    $persona_contacto = limpiar($_POST['persona_contacto']);
 
     if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "El email no es válido.";
     }
 
     if (empty($error)) {
-        $sql = "UPDATE empresas SET nombre=?, rif=?, direccion=?, telefono=?, email=?, persona_contacto=? WHERE id=?";
+        // SQL SIN persona_contacto
+        $sql = "UPDATE empresas SET nombre=?, rif=?, direccion=?, telefono=?, email=? WHERE id=?";
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param("ssssssi", $nombre, $rif, $direccion, $telefono, $email, $persona_contacto, $id);
+        // "sssssi" -> 5 strings, 1 int
+        $stmt->bind_param("sssssi", $nombre, $rif, $direccion, $telefono, $email, $id);
         
         if ($stmt->execute()) {
             $mensajeExito = "Empresa actualizada correctamente";
-            // Actualizar variables para la vista
+            // Refrescar variables
             $empresa['nombre'] = $nombre;
             $rif_actual_letra = $_POST['rif_tipo'];
             $rif_actual_numero = $_POST['rif_numero'];
@@ -105,13 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label>RIF:</label>
             <div style="display: flex; gap: 10px;">
-                <select name="rif_tipo" style="width: 80px; padding: 8px;">
+                <select name="rif_tipo" style="width: 80px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;">
                     <option value="J" <?= $rif_actual_letra == 'J' ? 'selected' : '' ?>>J</option>
                     <option value="G" <?= $rif_actual_letra == 'G' ? 'selected' : '' ?>>G</option>
                     <option value="V" <?= $rif_actual_letra == 'V' ? 'selected' : '' ?>>V</option>
                     <option value="E" <?= $rif_actual_letra == 'E' ? 'selected' : '' ?>>E</option>
                 </select>
-                <input type="text" name="rif_numero" value="<?= htmlspecialchars($rif_actual_numero) ?>" required pattern="[0-9-]+" title="Solo números">
+                <input type="text" name="rif_numero" value="<?= htmlspecialchars($rif_actual_numero) ?>" required pattern="[0-9]+" title="Solo números">
             </div>
         </div>
 
@@ -123,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <div class="form-group">
             <label for="telefono">Teléfono:</label>
             <div style="display: flex; align-items: center; gap: 5px;">
-                <span style="background: #eee; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px;">+58</span>
+                <span style="background: #eee; padding: 0.8rem 1rem; border: 1px solid #d1d5db; border-radius: 6px;">+58</span>
                 <input type="number" id="telefono" name="telefono" value="<?= htmlspecialchars($telefono_limpio) ?>" style="flex: 1;">
             </div>
         </div>
@@ -133,9 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <input type="email" id="email" name="email" value="<?= htmlspecialchars($empresa['email'] ?? '') ?>">
         </div>
 
-        
         <div class="form-actions">
-            <button type="submit" class="btn">Actualizar</button>
+            <button type="submit" class="btn btn-primary">Actualizar</button>
             <a href="index.php" class="btn secondary">Cancelar</a>
         </div>
     </form>

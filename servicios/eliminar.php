@@ -1,40 +1,35 @@
 <?php
 session_start();
 require_once '../includes/database.php';
-require_once __DIR__ . '/../includes/functions.php';
 
+header("Content-Type: application/json");
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: /Servindteca/login.php");
-    exit();
+// Validación de seguridad
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'error' => 'No autorizado']);
+    exit;
 }
 
-
-$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-$sql = "DELETE FROM servicios WHERE id = ? AND usuario_id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("ii", $id, $_SESSION['user_id']);
-
+// Leer entrada JSON
+$input = json_decode(file_get_contents('php://input'), true);
+$id = intval($input['id'] ?? 0);
 
 if ($id <= 0) {
-    header("Location: index.php?error=id_invalido");
-    exit();
+    echo json_encode(['success' => false, 'error' => 'ID inválido']);
+    exit;
 }
 
+try {
+    $sql = "DELETE FROM servicios WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $id);
 
-$sql = "DELETE FROM servicios WHERE id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $id);
-
-if ($stmt->execute()) {
-    
-    header("Location: index.php?success=servicio_eliminado");
-} else {
-   
-    header("Location: index.php?error=no_se_pudo_eliminar");
+    if ($stmt->execute()) {
+        echo json_encode(['success' => true]);
+    } else {
+        throw new Exception($conn->error);
+    }
+} catch (Exception $e) {
+    echo json_encode(['success' => false, 'error' => 'Error: ' . $e->getMessage()]);
 }
-
-$stmt->close();
-$conn->close();
-exit();
 ?>

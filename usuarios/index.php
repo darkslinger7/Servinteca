@@ -1,51 +1,56 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id'])) { header("Location: /Servindteca/auth/login.php"); exit(); }
 require_once '../includes/database.php';
 
-$sql = "SELECT * FROM proveedores ORDER BY nombre";
+// SEGURIDAD: Solo admin entra aquí
+if (!isset($_SESSION['user_id']) || $_SESSION['rol'] !== 'admin') {
+    header("Location: /Servindteca/index.php");
+    exit();
+}
+
+$sql = "SELECT * FROM usuarios ORDER BY nombre_completo";
 $result = $conn->query($sql);
 ?>
 
 <?php include '../includes/header.php'; ?>
 
 <section class="empresas-list">
-    <h2>Gestión de Proveedores</h2>
-    <?php if(isset($_GET['success'])): ?><div class="alert success" id="alert-msg">Operación exitosa.</div><?php endif; ?>
-    <?php if(isset($_GET['error'])): ?><div class="alert error" id="alert-msg">Error: <?= htmlspecialchars($_GET['error']) ?></div><?php endif; ?>
+    <h2>Gestión de Usuarios (Personal)</h2>
+    
+    <?php if(isset($_GET['success'])): ?><div class="alert success">Usuario registrado/actualizado.</div><?php endif; ?>
     
     <div class="actions">
-        <a href="crear.php" class="btn-new"><i class="fas fa-plus"></i> Nuevo Proveedor</a>
-        <input type="text" id="buscar" placeholder="Buscar proveedor..." onkeyup="filtrarTabla()">
+        <a href="crear.php" class="btn-new"><i class="fas fa-user-plus"></i> Nuevo Usuario</a>
     </div>
     
     <div class="table-responsive">
         <table>
             <thead>
                 <tr>
-                    <th>Empresa</th>
-                    <th>Documento</th>
-                    <th>Teléfono</th>
-                    <th>Email</th>
-                    <th>Contacto</th>
+                    <th>Nombre</th>
+                    <th>Usuario (Login)</th>
+                    <th>Rol</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 <?php while($row = $result->fetch_assoc()): ?>
                 <tr>
-                    <td><strong><?= htmlspecialchars($row['nombre']) ?></strong></td>
-                    <td><?= htmlspecialchars($row['documento']) ?></td>
-                    <td><?= htmlspecialchars($row['telefono'] ?? '-') ?></td>
-                    <td><?= htmlspecialchars($row['email'] ?? '-') ?></td>
-                    <td><?= htmlspecialchars($row['persona_contacto'] ?? '-') ?></td>
+                    <td><?= htmlspecialchars($row['nombre_completo']) ?></td>
+                    <td><?= htmlspecialchars($row['username']) ?></td>
+                    <td>
+                        <span style="padding: 2px 8px; border-radius: 4px; background: <?= $row['rol']=='admin'?'#e0e7ff':'#dcfce7' ?>; color: <?= $row['rol']=='admin'?'#3730a3':'#166534' ?>; font-weight: bold; font-size: 0.85rem;">
+                            <?= ucfirst($row['rol']) ?>
+                        </span>
+                    </td>
                     <td class="actions">
-                        <a href="editar.php?id=<?= $row['id'] ?>" class="btn-edit"><i class="fas fa-edit"></i></a>
-                        <button class="btn-danger btn-eliminar" data-id="<?= $row['id'] ?>"><i class="fas fa-trash"></i></button>
+                        <a href="editar.php?id=<?= $row['id'] ?>" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
+                        <?php if($row['id'] != $_SESSION['user_id']): ?>
+                            <button class="btn-danger btn-eliminar" data-id="<?= $row['id'] ?>"><i class="fas fa-trash"></i></button>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endwhile; ?>
-                <?php if ($result->num_rows === 0): ?><tr><td colspan="6" style="text-align:center;">Sin datos.</td></tr><?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -53,8 +58,8 @@ $result = $conn->query($sql);
 
 <div id="confirmModal" class="modal" style="display:none;">
     <div class="modal-content">
-        <h3>Eliminar Proveedor</h3>
-        <p>¿Estás seguro? No se borrará si tiene historial de compras.</p>
+        <h3>Eliminar Usuario</h3>
+        <p>¿Estás seguro? Este usuario perderá acceso al sistema.</p>
         <div class="modal-actions">
             <button id="confirmCancel" class="btn secondary">Cancelar</button>
             <button id="confirmDelete" class="btn danger">Eliminar</button>
@@ -89,15 +94,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.getElementById('confirmCancel').addEventListener('click', () => modal.style.display = 'none');
-    const alerta = document.getElementById('alert-msg');
-    if(alerta) setTimeout(() => alerta.style.display='none', 3000);
 });
-
-function filtrarTabla() {
-    const filter = document.getElementById('buscar').value.toUpperCase();
-    document.querySelectorAll('tbody tr').forEach(row => {
-        row.style.display = row.innerText.toUpperCase().includes(filter) ? '' : 'none';
-    });
-}
 </script>
 <?php include '../includes/footer.php'; ?>

@@ -11,23 +11,25 @@ require_once 'includes/header.php';
         <?php if (isset($_SESSION['user_id'])): ?>
             <div class="user-panel">
                 <p class="user-greeting">Hola, <strong><?= htmlspecialchars($_SESSION['nombre_completo'] ?? 'Usuario') ?></strong></p>
+
                 <div class="action-buttons">
-                    <a href="/Servindteca/empresas/index.php" class="btn btn-primary">Ver Empresas</a>
+                    <a href="proveedores/index.php" class="btn btn-primary">Proveedores</a>
+                    <a href="compras/index.php" class="btn btn-primary">Compras</a>
+                    <a href="ventas/index.php" class="btn btn-primary">Ventas</a>
+                    <a href="reportes/index.php" class="btn btn-primary">Estadisticas</a>
+                </div>
+                <div class="action-buttons">
+                    <a href="/Servindteca/empresas/index.php" class="btn btn-primary">Ver Clientes</a>
                     <a href="servicios/index.php" class="btn btn-primary">Ver Servicios</a>
-                    <a href="maquinas/index.php" class="btn btn-primary">Ver Máquinas</a>
-                    <a href="repuestos/index.php" class="btn btn-primary">Ver Repuestos</a>
+                    <a href="productos/index.php" class="btn btn-primary">Inventario</a>
+
                 </div>
             </div>
+
             <div class="action-buttons">
-                <a href="proveedores/index.php" class="btn btn-primary">Proveedores</a>
-                <a href="compras/index.php" class="btn btn-primary">Compras</a>
-                <a href="ventas/index.php" class="btn btn-primary">Ventas</a>
-                <a href="reportes/index.php" class="btn btn-primary">Estadisticas</a>
-            </div>
-             <div class="action-buttons">
                 <a href="auth/logout.php" class="btn btn-logout">Cerrar sesión</a>
             </div>
-            
+
         <?php else: ?>
             <div class="login-prompt">
                 <p>Por favor inicia sesión para acceder al sistema</p>

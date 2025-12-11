@@ -1,14 +1,11 @@
 <?php
 session_start();
-// Verificamos sesión (opcional, pero recomendado si ya tienes login)
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../auth/login.php");
     exit();
 }
-
 require_once '../includes/database.php';
 
-// La consulta sigue igual, seleccionamos todo (*) para traer las nuevas columnas
 $sql = "SELECT * FROM empresas ORDER BY nombre";
 $result = $conn->query($sql);
 ?>
@@ -16,39 +13,25 @@ $result = $conn->query($sql);
 <?php include '../includes/header.php'; ?>
 
 <section class="empresas-list">
-    <h2>Empresas Registradas</h2>
+    <h2>Empresas Registradas (Clientes)</h2>
     
     <?php if(isset($_GET['success'])): ?>
-        <div class="alert success">
-            <?php 
-            switch($_GET['success']) {
-                case 'empresa_eliminada': echo "Empresa eliminada correctamente"; break;
-                case 'empresa_creada': echo "Empresa registrada exitosamente"; break; // Agregué este caso por si acaso
-                case 'empresa_actualizada': echo "Datos actualizados exitosamente"; break; // Y este
-            }
-            ?>
-        </div>
+        <div class="alert success" id="alert-msg">Operación realizada exitosamente.</div>
     <?php endif; ?>
     
     <?php if(isset($_GET['error'])): ?>
-        <div class="alert error">
-            <?php 
-            switch($_GET['error']) {
-                case 'empresa_no_encontrada': echo "La empresa no fue encontrada"; break;
-                case 'error_eliminacion': echo "Error al eliminar la empresa"; break;
-            }
-            ?>
-        </div>
+        <div class="alert error" id="alert-msg">Error: <?= htmlspecialchars($_GET['error']) ?></div>
     <?php endif; ?>
     
     <div class="actions">
         <a href="crear.php" class="btn-new">
             <i class="fas fa-plus"></i> Nueva Empresa
         </a>
-        <input type="text" id="buscar-empresa" placeholder="Buscar empresa...">
+        <input type="text" id="buscar-empresa" placeholder="Buscar por nombre, RIF..." onkeyup="filtrarEmpresas()">
     </div>
 
-    <div style="overflow-x: auto;"> <table>
+    <div class="table-responsive">
+        <table>
             <thead>
                 <tr>
                     <th>Nombre / Razón Social</th>
@@ -64,22 +47,19 @@ $result = $conn->query($sql);
                 <tr>
                     <td><strong><?= htmlspecialchars($empresa['nombre']) ?></strong></td>
                     <td><?= htmlspecialchars($empresa['rif']) ?></td>
-                    
-                    <td><small><?= htmlspecialchars($empresa['direccion'] ?? 'N/A') ?></small></td>
-                    <td><?= htmlspecialchars($empresa['telefono'] ?? '') ?></td>
-                    <td><?= htmlspecialchars($empresa['email'] ?? '') ?></td>
-                    
+                    <td><small><?= htmlspecialchars($empresa['direccion'] ?? '-') ?></small></td>
+                    <td><?= htmlspecialchars($empresa['telefono'] ?? '-') ?></td>
+                    <td><?= htmlspecialchars($empresa['email'] ?? '-') ?></td>
                     
                     <td class="actions">
-                        <a href="editar.php?id=<?= $empresa['id'] ?>" class="btn-edit" title="Editar">
-                            <i class="fas fa-edit"></i>
-                        </a>
-                        <button class="btn-danger btn-eliminar" data-id="<?= $empresa['id'] ?>" title="Eliminar">
-                            <i class="fas fa-trash"></i>
-                        </button> 
+                        <a href="editar.php?id=<?= $empresa['id'] ?>" class="btn-edit" title="Editar"><i class="fas fa-edit"></i></a>
+                        <button class="btn-danger btn-eliminar" data-id="<?= $empresa['id'] ?>" title="Eliminar"><i class="fas fa-trash"></i></button> 
                     </td>
                 </tr>
                 <?php endwhile; ?>
+                <?php if ($result->num_rows === 0): ?>
+                    <tr><td colspan="6" style="text-align:center;">No hay empresas registradas.</td></tr>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
@@ -97,67 +77,54 @@ $result = $conn->query($sql);
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    let idEliminar = null;
+    const modal = document.getElementById('confirmModal');
 
-async function eliminarEmpresa(id) {
-    try {
-        const response = await fetch('eliminar.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ id: id })
+    document.querySelectorAll('.btn-eliminar').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            idEliminar = this.dataset.id;
+            modal.style.display = 'flex';
         });
+    });
 
-        const data = await response.json();
+    document.getElementById('confirmDelete').addEventListener('click', async () => {
+        if (!idEliminar) return;
+        try {
+            const response = await fetch('eliminar.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: idEliminar })
+            });
+            const data = await response.json();
 
-        if (!response.ok) {
-            throw new Error(data.error || 'Error en el servidor');
-        }
-
-        if (!data.success) {
-            throw new Error(data.error || 'Error al eliminar');
-        }
-
-        window.location.href = 'index.php?success=empresa_eliminada';
-        
-    } catch (error) {
-        console.error('Error:', error);
-        alert(error.message);
-        window.location.href = 'index.php?error=eliminacion_fallida';
-    }
-}
-
-
-document.querySelectorAll('.btn-eliminar').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-        e.preventDefault();
-        const id = this.dataset.id;
-        const modal = document.getElementById('confirmModal');
-        const btnConfirm = document.getElementById('confirmDelete');
-        const btnCancel = document.getElementById('confirmCancel');
-        
-       
-        modal.style.display = 'flex';
-        
-       
-        btnConfirm.onclick = function() {
-            eliminarEmpresa(id);
-        };
-        
-        
-        btnCancel.onclick = function() {
-            modal.style.display = 'none';
-        };
-        
-     
-        window.onclick = function(event) {
-            if (event.target == modal) {
+            if (data.success) {
+                window.location.href = 'index.php?success=1';
+            } else {
+                alert(data.error || 'Error al eliminar');
                 modal.style.display = 'none';
             }
+        } catch (error) {
+            console.error(error);
+            alert('Error de conexión');
         }
     });
+
+    document.getElementById('confirmCancel').addEventListener('click', () => modal.style.display = 'none');
+    
+    const alerta = document.getElementById('alert-msg');
+    if(alerta) setTimeout(() => alerta.style.display='none', 3000);
 });
+
+function filtrarEmpresas() {
+    const filter = document.getElementById('buscar-empresa').value.toUpperCase();
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const text = row.textContent || row.innerText;
+        row.style.display = text.toUpperCase().includes(filter) ? '' : 'none';
+    });
+}
 </script>
 
 <?php include '../includes/footer.php'; ?>

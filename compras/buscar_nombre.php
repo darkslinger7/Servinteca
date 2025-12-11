@@ -1,16 +1,14 @@
 <?php
-// Script para buscar productos por nombre
 require_once '../includes/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
 if (isset($_GET['nombre'])) {
-    $nombre_buscado = '%' . limpiar($_GET['nombre']) . '%'; // Buscar coincidencias parciales
+    $nombre_buscado = '%' . limpiar($_GET['nombre']) . '%'; 
 
     $resultados = [];
 
-    // Buscar en la tabla 'maquinas'
     $sql_maquinas = "SELECT codigo, nombre, 'Máquina' AS tipo FROM maquinas WHERE nombre LIKE ? LIMIT 5";
     $stmt_maquinas = $conn->prepare($sql_maquinas);
     $stmt_maquinas->bind_param("s", $nombre_buscado);
@@ -21,7 +19,7 @@ if (isset($_GET['nombre'])) {
     }
     $stmt_maquinas->close();
 
-    // Buscar en la tabla 'repuestos'
+    
     $sql_repuestos = "SELECT codigo, nombre, 'Repuesto' AS tipo FROM repuestos WHERE nombre LIKE ? LIMIT 5";
     $stmt_repuestos = $conn->prepare($sql_repuestos);
     $stmt_repuestos->bind_param("s", $nombre_buscado);
